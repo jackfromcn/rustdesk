@@ -19,7 +19,6 @@ import 'package:flutter_hbb/models/file_model.dart';
 import 'package:flutter_hbb/models/group_model.dart';
 import 'package:flutter_hbb/models/peer_model.dart';
 import 'package:flutter_hbb/models/peer_tab_model.dart';
-import 'package:flutter_hbb/models/printer_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
 import 'package:flutter_hbb/models/user_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
@@ -57,7 +56,6 @@ typedef ReconnectHandle = Function(OverlayDialogManager, SessionID, bool);
 final _constSessionId = Uuid().v4obj();
 
 class CachedPeerData {
-  Map<String, dynamic> updatePrivacyMode = {};
   Map<String, dynamic> peerInfo = {};
   List<Map<String, dynamic>> cursorDataList = [];
   Map<String, dynamic> lastCursorId = {};
@@ -72,7 +70,6 @@ class CachedPeerData {
   @override
   String toString() {
     return jsonEncode({
-      'updatePrivacyMode': updatePrivacyMode,
       'peerInfo': peerInfo,
       'cursorDataList': cursorDataList,
       'lastCursorId': lastCursorId,
@@ -87,7 +84,6 @@ class CachedPeerData {
     try {
       final map = jsonDecode(s);
       final data = CachedPeerData();
-      data.updatePrivacyMode = map['updatePrivacyMode'];
       data.peerInfo = map['peerInfo'];
       for (final cursorData in map['cursorDataList']) {
         data.cursorDataList.add(cursorData);
@@ -136,8 +132,6 @@ class FfiModel with ChangeNotifier {
   Rect? get rect => _rect;
   bool get isOriginalResolutionSet =>
       _pi.tryGetDisplayIfNotAllDisplay()?.isOriginalResolutionSet ?? false;
-  bool get isVirtualDisplayResolution =>
-      _pi.tryGetDisplayIfNotAllDisplay()?.isVirtualDisplayResolution ?? false;
   bool get isOriginalResolution =>
       _pi.tryGetDisplayIfNotAllDisplay()?.isOriginalResolution ?? false;
 
@@ -309,7 +303,6 @@ class FfiModel with ChangeNotifier {
       'text': kMsgboxTextWaitingForImage,
       'link': '',
     }, sessionId, peerId);
-    updatePrivacyMode(data.updatePrivacyMode, sessionId, peerId);
     setConnectionType(peerId, data.secure, data.direct, data.streamType);
     await handlePeerInfo(data.peerInfo, peerId, true);
     for (final element in data.cursorDataList) {
@@ -394,8 +387,6 @@ class FfiModel with ChangeNotifier {
         parent.target?.qualityMonitorModel.updateQualityStatus(evt);
       } else if (name == 'update_block_input_state') {
         updateBlockInputState(evt, peerId);
-      } else if (name == 'update_privacy_mode') {
-        updatePrivacyMode(evt, sessionId, peerId);
       } else if (name == 'show_elevation') {
         final show = evt['show'].toString() == 'true';
         parent.target?.serverModel.setShowElevation(show);
@@ -463,14 +454,6 @@ class FfiModel with ChangeNotifier {
         if (isWeb) {
           parent.target?.fileModel.sendEmptyDirs(evt);
         }
-      } else if (name == "record_status") {
-        if (desktopType == DesktopType.remote ||
-            desktopType == DesktopType.viewCamera ||
-            isMobile) {
-          parent.target?.recordingModel.updateStatus(evt['start'] == 'true');
-        }
-      } else if (name == "printer_request") {
-        _handlePrinterRequest(evt, sessionId, peerId);
       } else if (name == 'screenshot') {
         _handleScreenshot(evt, sessionId, peerId);
       } else if (name == 'exit_relative_mouse_mode') {
@@ -548,178 +531,6 @@ class FfiModel with ChangeNotifier {
         tag: '$msgBoxType-$msgBoxTitle-$msgBoxTitle',
       );
     }
-  }
-
-  _handlePrinterRequest(
-      Map<String, dynamic> evt, SessionID sessionId, String peerId) {
-    final id = evt['id'];
-    final path = evt['path'];
-    final dialogManager = parent.target!.dialogManager;
-    dialogManager.show((setState, close, context) {
-      PrinterOptions printerOptions = PrinterOptions.load();
-      final saveSettings = mainGetLocalBoolOptionSync(kKeyPrinterSave).obs;
-      final dontShowAgain = false.obs;
-      final Rx<String> selectedPrinterName = printerOptions.printerName.obs;
-      final printerNames = printerOptions.printerNames;
-      final defaultOrSelectedGroupValue =
-          (printerOptions.action == kValuePrinterIncomingJobDismiss
-                  ? kValuePrinterIncomingJobDefault
-                  : printerOptions.action)
-              .obs;
-
-      onRatioChanged(String? value) {
-        defaultOrSelectedGroupValue.value =
-            value ?? kValuePrinterIncomingJobDefault;
-      }
-
-      onSubmit() {
-        final printerName = defaultOrSelectedGroupValue.isEmpty
-            ? ''
-            : selectedPrinterName.value;
-        bind.sessionPrinterResponse(
-            sessionId: sessionId, id: id, path: path, printerName: printerName);
-        if (saveSettings.value || dontShowAgain.value) {
-          bind.mainSetLocalOption(key: kKeyPrinterSelected, value: printerName);
-          bind.mainSetLocalOption(
-              key: kKeyPrinterIncomingJobAction,
-              value: defaultOrSelectedGroupValue.value);
-        }
-        if (dontShowAgain.value) {
-          mainSetLocalBoolOption(kKeyPrinterAllowAutoPrint, true);
-        }
-        close();
-      }
-
-      onCancel() {
-        if (dontShowAgain.value) {
-          bind.mainSetLocalOption(
-              key: kKeyPrinterIncomingJobAction,
-              value: kValuePrinterIncomingJobDismiss);
-        }
-        close();
-      }
-
-      final printerItemHeight = 30.0;
-      final selectionAreaHeight =
-          printerItemHeight * min(8.0, max(printerNames.length, 3.0));
-      final content = Column(
-        children: [
-          Text(translate('print-incoming-job-confirm-tip')),
-          Row(
-            children: [
-              Obx(() => Radio<String>(
-                  value: kValuePrinterIncomingJobDefault,
-                  groupValue: defaultOrSelectedGroupValue.value,
-                  onChanged: onRatioChanged)),
-              GestureDetector(
-                  child: Text(translate('use-the-default-printer-tip')),
-                  onTap: () => onRatioChanged(kValuePrinterIncomingJobDefault)),
-            ],
-          ),
-          Column(
-            children: [
-              Row(children: [
-                Obx(() => Radio<String>(
-                    value: kValuePrinterIncomingJobSelected,
-                    groupValue: defaultOrSelectedGroupValue.value,
-                    onChanged: onRatioChanged)),
-                GestureDetector(
-                    child: Text(translate('use-the-selected-printer-tip')),
-                    onTap: () =>
-                        onRatioChanged(kValuePrinterIncomingJobSelected)),
-              ]),
-              SizedBox(
-                height: selectionAreaHeight,
-                width: 500,
-                child: ListView.builder(
-                    itemBuilder: (context, index) {
-                      return Obx(() => GestureDetector(
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: selectedPrinterName.value ==
-                                        printerNames[index]
-                                    ? (defaultOrSelectedGroupValue.value ==
-                                            kValuePrinterIncomingJobSelected
-                                        ? MyTheme.button
-                                        : MyTheme.button.withOpacity(0.5))
-                                    : Theme.of(context).cardColor,
-                                borderRadius: BorderRadius.all(
-                                  Radius.circular(5.0),
-                                ),
-                              ),
-                              key: ValueKey(printerNames[index]),
-                              height: printerItemHeight,
-                              child: Align(
-                                alignment: Alignment.centerLeft,
-                                child: Padding(
-                                  padding: const EdgeInsets.only(left: 10.0),
-                                  child: Text(
-                                    printerNames[index],
-                                    style: TextStyle(fontSize: 14),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            onTap: defaultOrSelectedGroupValue.value ==
-                                    kValuePrinterIncomingJobSelected
-                                ? () {
-                                    selectedPrinterName.value =
-                                        printerNames[index];
-                                  }
-                                : null,
-                          ));
-                    },
-                    itemCount: printerNames.length),
-              ),
-            ],
-          ),
-          Row(
-            children: [
-              Obx(() => Checkbox(
-                  value: saveSettings.value,
-                  onChanged: (value) {
-                    if (value != null) {
-                      saveSettings.value = value;
-                      mainSetLocalBoolOption(kKeyPrinterSave, value);
-                    }
-                  })),
-              GestureDetector(
-                  child: Text(translate('save-settings-tip')),
-                  onTap: () {
-                    saveSettings.value = !saveSettings.value;
-                    mainSetLocalBoolOption(kKeyPrinterSave, saveSettings.value);
-                  }),
-            ],
-          ),
-          Row(
-            children: [
-              Obx(() => Checkbox(
-                  value: dontShowAgain.value,
-                  onChanged: (value) {
-                    if (value != null) {
-                      dontShowAgain.value = value;
-                    }
-                  })),
-              GestureDetector(
-                  child: Text(translate('dont-show-again-tip')),
-                  onTap: () {
-                    dontShowAgain.value = !dontShowAgain.value;
-                  }),
-            ],
-          ),
-        ],
-      );
-      return CustomAlertDialog(
-        title: Text(translate('Incoming Print Job')),
-        content: content,
-        actions: [
-          dialogButton('OK', onPressed: onSubmit),
-          dialogButton('Cancel', onPressed: onCancel),
-        ],
-        onSubmit: onSubmit,
-        onCancel: onCancel,
-      );
-    });
   }
 
   _handleUseTextureRender(
@@ -1191,36 +1002,13 @@ class FfiModel with ChangeNotifier {
   }
 
   void _queryAuditGuid(String peerId) async {
-    try {
-      if (bind.isDisableAccount()) {
-        return;
-      }
-      if (bind
-          .sessionGetAuditServerSync(sessionId: sessionId, typ: "conn/active")
-          .isEmpty) {
-        return;
-      }
-      if (!mainGetLocalBoolOptionSync(
-          kOptionAllowAskForNoteAtEndOfConnection)) {
-        return;
-      }
-      if (bind.sessionGetAuditGuid(sessionId: sessionId).isNotEmpty) {
-        debugPrint('Get cached audit GUID');
-        return;
-      }
-      final url = bind.sessionGetAuditServerSync(
-          sessionId: sessionId, typ: "conn/active");
-      if (url.isEmpty) {
-        return;
-      }
-      final initialConnSessionId =
-          bind.sessionGetConnSessionId(sessionId: sessionId);
+    return; // Account system disabled
+  }
       final connType = switch (parent.target?.connType) {
         ConnType.defaultConn => 0,
         ConnType.fileTransfer => 1,
         ConnType.portForward => 2,
-        ConnType.rdp => 2,
-        ConnType.viewCamera => 3,
+        ConnType.rdp => 3,
         ConnType.terminal => 4,
         _ => 0,
       };
@@ -1358,8 +1146,7 @@ class FfiModel with ChangeNotifier {
       for (final model in models) {
         model.onReady();
       }
-    } else if (connType == ConnType.defaultConn ||
-        connType == ConnType.viewCamera) {
+    } else if (connType == ConnType.defaultConn) {
       List<Display> newDisplays = [];
       List<dynamic> displays = json.decode(evt['displays']);
       for (int i = 0; i < displays.length; ++i) {
@@ -1378,7 +1165,7 @@ class FfiModel with ChangeNotifier {
         isRefreshing = false;
       }
       Map<String, dynamic> features = json.decode(evt['features']);
-      _pi.features.privacyMode = features['privacy_mode'] == true;
+      _pi.features.privacyMode = false; // Privacy mode disabled
       if (!isCache) {
         handleResolutions(peerId, evt["resolutions"]);
       }
@@ -1392,7 +1179,7 @@ class FfiModel with ChangeNotifier {
       setShowMyCursor(bind.sessionGetToggleOptionSync(
           sessionId: sessionId, arg: kOptionToggleShowMyCursor));
     }
-    if (connType == ConnType.defaultConn || connType == ConnType.viewCamera) {
+    if (connType == ConnType.defaultConn) {
       final platformAdditions = evt['platform_additions'];
       if (platformAdditions != null && platformAdditions != '') {
         try {
@@ -1644,21 +1431,13 @@ class FfiModel with ChangeNotifier {
     }
 
     if (updateData.isEmpty) {
-      _pi.platformAdditions.remove(kPlatformAdditionsRustDeskVirtualDisplays);
-      _pi.platformAdditions.remove(kPlatformAdditionsAmyuniVirtualDisplays);
+      // Clear all platform additions
+      _pi.platformAdditions.clear();
     } else {
       try {
         final updateJson = json.decode(updateData) as Map<String, dynamic>;
         for (final key in updateJson.keys) {
           _pi.platformAdditions[key] = updateJson[key];
-        }
-        if (!updateJson
-            .containsKey(kPlatformAdditionsRustDeskVirtualDisplays)) {
-          _pi.platformAdditions
-              .remove(kPlatformAdditionsRustDeskVirtualDisplays);
-        }
-        if (!updateJson.containsKey(kPlatformAdditionsAmyuniVirtualDisplays)) {
-          _pi.platformAdditions.remove(kPlatformAdditionsAmyuniVirtualDisplays);
         }
       } catch (e) {
         debugPrint('Failed to decode platformAdditions $e');
@@ -1715,23 +1494,7 @@ class FfiModel with ChangeNotifier {
 
   updatePrivacyMode(
       Map<String, dynamic> evt, SessionID sessionId, String peerId) async {
-    notifyListeners();
-    try {
-      final isOn = bind.sessionGetToggleOptionSync(
-          sessionId: sessionId, arg: 'privacy-mode');
-      if (isOn) {
-        var privacyModeImpl = await bind.sessionGetOption(
-            sessionId: sessionId, arg: 'privacy-mode-impl-key');
-        // For compatibility, version < 1.2.4, the default value is 'privacy_mode_impl_mag'.
-        final initDefaultPrivacyMode = 'privacy_mode_impl_mag';
-        PrivacyModeState.find(peerId).value =
-            privacyModeImpl ?? initDefaultPrivacyMode;
-      } else {
-        PrivacyModeState.find(peerId).value = '';
-      }
-    } catch (e) {
-      //
-    }
+    // Privacy mode disabled
   }
 
   void setViewOnly(String id, bool value) {
@@ -3546,31 +3309,6 @@ class QualityMonitorModel with ChangeNotifier {
   }
 }
 
-class RecordingModel with ChangeNotifier {
-  WeakReference<FFI> parent;
-  RecordingModel(this.parent);
-  bool _start = false;
-  bool get start => _start;
-
-  toggle() async {
-    if (isIOS) return;
-    final sessionId = parent.target?.sessionId;
-    if (sessionId == null) return;
-    final pi = parent.target?.ffiModel.pi;
-    if (pi == null) return;
-    bool value = !_start;
-    if (value) {
-      await sessionRefreshVideo(sessionId, pi);
-    }
-    await bind.sessionRecordScreen(sessionId: sessionId, start: value);
-  }
-
-  updateStatus(bool status) {
-    _start = status;
-    notifyListeners();
-  }
-}
-
 class ElevationModel with ChangeNotifier {
   WeakReference<FFI> parent;
   ElevationModel(this.parent);
@@ -3591,7 +3329,6 @@ enum ConnType {
   fileTransfer,
   portForward,
   rdp,
-  viewCamera,
   terminal
 }
 
@@ -3618,7 +3355,6 @@ class FFI {
   late final UserModel userModel; // global
   late final PeerTabModel peerTabModel; // global
   late final QualityMonitorModel qualityMonitorModel; // session
-  late final RecordingModel recordingModel; // session
   late final InputModel inputModel; // session
   late final ElevationModel elevationModel; // session
   late final CmFileModel cmFileModel; // cm
@@ -3647,7 +3383,6 @@ class FFI {
     abModel = AbModel(WeakReference(this));
     groupModel = GroupModel(WeakReference(this));
     qualityMonitorModel = QualityMonitorModel(WeakReference(this));
-    recordingModel = RecordingModel(WeakReference(this));
     inputModel = InputModel(WeakReference(this));
     elevationModel = ElevationModel(WeakReference(this));
     cmFileModel = CmFileModel(WeakReference(this));
@@ -3673,11 +3408,10 @@ class FFI {
     ffiModel.waitForImageTimer = null;
   }
 
-  /// Start with the given [id]. Only transfer file if [isFileTransfer], only view camera if [isViewCamera], only port forward if [isPortForward].
+  /// Start with the given [id]. Only transfer file if [isFileTransfer], only port forward if [isPortForward].
   void start(
     String id, {
     bool isFileTransfer = false,
-    bool isViewCamera = false,
     bool isPortForward = false,
     bool isRdp = false,
     bool isTerminal = false,
@@ -3693,17 +3427,12 @@ class FFI {
     closed = false;
     if (isMobile) mobileReset();
     assert(
-        (!(isPortForward && isViewCamera)) &&
-            (!(isViewCamera && isPortForward)) &&
-            (!(isPortForward && isFileTransfer)) &&
+        (!(isPortForward && isFileTransfer)) &&
             (!(isTerminal && isFileTransfer)) &&
-            (!(isTerminal && isViewCamera)) &&
             (!(isTerminal && isPortForward)),
         'more than one connect type');
     if (isFileTransfer) {
       connType = ConnType.fileTransfer;
-    } else if (isViewCamera) {
-      connType = ConnType.viewCamera;
     } else if (isPortForward) {
       connType = ConnType.portForward;
     } else if (isTerminal) {
@@ -3725,7 +3454,6 @@ class FFI {
         sessionId: sessionId,
         id: id,
         isFileTransfer: isFileTransfer,
-        isViewCamera: isViewCamera,
         isPortForward: isPortForward,
         isRdp: isRdp,
         isTerminal: isTerminal,
@@ -3744,8 +3472,7 @@ class FFI {
       final addRes = bind.sessionAddExistedSync(
           id: id,
           sessionId: sessionId,
-          displays: Int32List.fromList(displays),
-          isViewCamera: isViewCamera);
+          displays: Int32List.fromList(displays));
       if (addRes != '') {
         debugPrint(
             'Unreachable, failed to add existed session to $id, $addRes');
@@ -3754,11 +3481,6 @@ class FFI {
       ffiModel.pi.currentDisplay = display;
     }
     if (isDesktop && connType == ConnType.defaultConn) {
-      textureModel.updateCurrentDisplay(display ?? 0);
-    }
-    // FIXME: separate cameras displays or shift all indices.
-    if (isDesktop && connType == ConnType.viewCamera) {
-      // FIXME: currently the default 0 is not used.
       textureModel.updateCurrentDisplay(display ?? 0);
     }
 
@@ -3971,7 +3693,6 @@ class FFI {
 }
 
 const kInvalidResolutionValue = -1;
-const kVirtualDisplayResolutionValue = 0;
 
 class Display {
   double x = 0;
@@ -4009,9 +3730,6 @@ class Display {
   bool get isOriginalResolutionSet =>
       originalWidth != kInvalidResolutionValue &&
       originalHeight != kInvalidResolutionValue;
-  bool get isVirtualDisplayResolution =>
-      originalWidth == kVirtualDisplayResolutionValue &&
-      originalHeight == kVirtualDisplayResolutionValue;
   bool get isOriginalResolution =>
       width == (originalWidth * scale).round() &&
       height == (originalHeight * scale).round();
@@ -4029,7 +3747,7 @@ class Resolution {
 }
 
 class Features {
-  bool privacyMode = false;
+  // Privacy mode disabled
 }
 
 const kInvalidDisplayIndex = -1;
@@ -4056,21 +3774,12 @@ class PeerInfo with ChangeNotifier {
   bool get isInstalled =>
       platform != kPeerPlatformWindows ||
       platformAdditions[kPlatformAdditionsIsInstalled] == true;
-  List<int> get RustDeskVirtualDisplays => List<int>.from(
-      platformAdditions[kPlatformAdditionsRustDeskVirtualDisplays] ?? []);
-  int get amyuniVirtualDisplayCount =>
-      platformAdditions[kPlatformAdditionsAmyuniVirtualDisplays] ?? 0;
 
   bool get isSupportMultiDisplay =>
       (isDesktop || isWebDesktop) && isSupportMultiUiSession;
   bool get forceTextureRender => currentDisplay == kAllDisplayValue;
 
   bool get cursorEmbedded => tryGetDisplay()?.cursorEmbedded ?? false;
-
-  bool get isRustDeskIdd =>
-      platformAdditions[kPlatformAdditionsIddImpl] == 'rustdesk_idd';
-  bool get isAmyuniIdd =>
-      platformAdditions[kPlatformAdditionsIddImpl] == 'amyuni_idd';
 
   Display? tryGetDisplay({int? display}) {
     if (displays.isEmpty) {

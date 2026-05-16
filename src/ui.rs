@@ -102,7 +102,6 @@ pub fn start(args: &mut [String]) {
     }
     if args.is_empty() {
         std::thread::spawn(move || check_zombie());
-        crate::common::check_software_update();
         frame.event_handler(UI {});
         frame.sciter_handler(UIHostHandler {});
         page = "index.html";
@@ -304,10 +303,6 @@ impl UI {
         hbb_common::config::is_disable_settings()
     }
 
-    pub fn is_disable_account(&self) -> bool {
-        hbb_common::config::is_disable_account()
-    }
-
     pub fn is_disable_installation(&self) -> bool {
         hbb_common::config::is_disable_installation()
     }
@@ -370,11 +365,6 @@ impl UI {
 
     fn is_installed(&self) -> bool {
         is_installed()
-    }
-
-    fn get_supported_privacy_mode_impls(&self) -> String {
-        serde_json::to_string(&crate::privacy_mode::get_supported_privacy_mode_impl())
-            .unwrap_or_default()
     }
 
     fn is_root(&self) -> bool {
@@ -516,10 +506,6 @@ impl UI {
 
     fn current_is_wayland(&mut self) -> bool {
         current_is_wayland()
-    }
-
-    fn get_software_update_url(&self) -> String {
-        crate::SOFTWARE_UPDATE_URL.lock().unwrap().clone()
     }
 
     fn get_new_version(&self) -> String {
@@ -729,7 +715,6 @@ impl sciter::EventHandler for UI {
         fn is_outgoing_only();
         fn is_incoming_only();
         fn is_disable_settings();
-        fn is_disable_account();
         fn is_disable_installation();
         fn is_disable_ab();
         fn get_id();
@@ -757,7 +742,6 @@ impl sciter::EventHandler for UI {
         fn get_icon();
         fn install_me(String, String);
         fn is_installed();
-        fn get_supported_privacy_mode_impls();
         fn is_root();
         fn is_release();
         fn set_socks(String, String, String);
@@ -787,11 +771,9 @@ impl sciter::EventHandler for UI {
         fn get_sound_inputs();
         fn set_options(Value);
         fn set_option(String, String);
-        fn get_software_update_url();
         fn get_new_version();
         fn get_version();
         fn get_fingerprint();
-        fn update_me(String);
         fn show_run_without_install();
         fn run_without_install();
         fn get_app_name();

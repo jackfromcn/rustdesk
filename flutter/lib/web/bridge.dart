@@ -69,7 +69,6 @@ class RustdeskImpl {
       {required String id,
       required UuidValue sessionId,
       required Int32List displays,
-      required bool isViewCamera,
       dynamic hint}) {
     return '';
   }
@@ -78,7 +77,6 @@ class RustdeskImpl {
       {required UuidValue sessionId,
       required String id,
       required bool isFileTransfer,
-      required bool isViewCamera,
       required bool isPortForward,
       required bool isRdp,
       required bool isTerminal,
@@ -95,7 +93,6 @@ class RustdeskImpl {
         'password': password,
         'is_shared_password': isSharedPassword,
         'isFileTransfer': isFileTransfer,
-        'isViewCamera': isViewCamera,
         'isTerminal': isTerminal
       })
     ]);
@@ -1311,17 +1308,6 @@ class RustdeskImpl {
     return Future.value();
   }
 
-  Future<void> sessionToggleVirtualDisplay(
-      {required UuidValue sessionId,
-      required int index,
-      required bool on,
-      dynamic hint}) {
-    return Future(() => js.context.callMethod('setByName', [
-          'toggle_virtual_display',
-          jsonEncode({'index': index, 'on': on})
-        ]));
-  }
-
   Future<void> mainSetHomeDir({required String home, dynamic hint}) {
     throw UnimplementedError("mainSetHomeDir");
   }
@@ -1625,11 +1611,6 @@ class RustdeskImpl {
   bool isDisableGroupPanel({dynamic hint}) {
     // Checks LocalConfig::get_option("disable-group-panel") == "Y"
     return mainGetLocalOption(key: "disable-group-panel", hint: hint) == "Y";
-  }
-
-  bool isDisableAccount({dynamic hint}) {
-    // Checks HARD_SETTINGS["disable-account"] == "Y"
-    return mainGetHardOption(key: "disable-account", hint: hint) == "Y";
   }
 
   bool isDisableInstallation({dynamic hint}) {

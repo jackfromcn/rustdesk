@@ -699,21 +699,6 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
                         translate('Enable audio'),
                         canModify: canModifyPermission,
                       ),
-                      buildPermissionIcon(
-                        client.recording,
-                        Icons.videocam_rounded,
-                        (enabled) {
-                          bind.cmSwitchPermission(
-                              connId: client.id,
-                              name: "recording",
-                              enabled: enabled);
-                          setState(() {
-                            client.recording = enabled;
-                          });
-                        },
-                        translate('Enable recording session'),
-                        canModify: canModifyPermission,
-                      ),
                     ]
                   : [
                       buildPermissionIcon(
@@ -791,21 +776,6 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
                         translate('Enable remote restart'),
                         canModify: canModifyPermission,
                       ),
-                      buildPermissionIcon(
-                        client.recording,
-                        Icons.videocam_rounded,
-                        (enabled) {
-                          bind.cmSwitchPermission(
-                              connId: client.id,
-                              name: "recording",
-                              enabled: enabled);
-                          setState(() {
-                            client.recording = enabled;
-                          });
-                        },
-                        translate('Enable recording session'),
-                        canModify: canModifyPermission,
-                      ),
                       // only windows support block input
                       if (isWindows)
                         buildPermissionIcon(
@@ -821,22 +791,6 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
                             });
                           },
                           translate('Enable blocking user input'),
-                          canModify: canModifyPermission,
-                        ),
-                      if (bind.mainSupportedPrivacyModeImpls() != '[]')
-                        buildPermissionIcon(
-                          client.privacyMode,
-                          Icons.visibility_off,
-                          (enabled) {
-                            bind.cmSwitchPermission(
-                                connId: client.id,
-                                name: "privacy_mode",
-                                enabled: enabled);
-                            setState(() {
-                              client.privacyMode = enabled;
-                            });
-                          },
-                          translate('Enable privacy mode'),
                           canModify: canModifyPermission,
                         )
                     ],

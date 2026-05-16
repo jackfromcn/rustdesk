@@ -124,8 +124,6 @@ class _RemotePageState extends State<RemotePage>
       _ffi.canvasModel.activateLocalCursor();
       showKBLayoutTypeChooserIfNeeded(
           _ffi.ffiModel.pi.platform, _ffi.dialogManager);
-      _ffi.recordingModel
-          .updateStatus(bind.sessionGetIsRecording(sessionId: _ffi.sessionId));
     });
     _ffi.canvasModel.initializeEdgeScrollFallback(this);
     _ffi.start(
@@ -444,17 +442,10 @@ class _RemotePageState extends State<RemotePage>
         final imageReady = _ffi.ffiModel.pi.isSet.isTrue &&
             _ffi.ffiModel.waitForFirstImage.isFalse;
         if (imageReady) {
-          // If the privacy mode(disable physical displays) is switched,
-          // we should not dismiss the dialog immediately.
-          if (DateTime.now().difference(togglePrivacyModeTime) >
-              const Duration(milliseconds: 3000)) {
-            // `dismissAll()` is to ensure that the state is clean.
-            // It's ok to call dismissAll() here.
-            _ffi.dialogManager.dismissAll();
-            // Recreate the block state to refresh the state.
-            _blockableOverlayState = BlockableOverlayState();
-            _blockableOverlayState.applyFfi(_ffi);
-          }
+          _ffi.dialogManager.dismissAll();
+          // Recreate the block state to refresh the state.
+          _blockableOverlayState = BlockableOverlayState();
+          _blockableOverlayState.applyFfi(_ffi);
           // Block the whole `bodyWidget()` when dialog shows.
           return BlockableOverlay(
             underlying: bodyWidget(),
@@ -482,7 +473,6 @@ class _RemotePageState extends State<RemotePage>
           ChangeNotifierProvider.value(value: _ffi.imageModel),
           ChangeNotifierProvider.value(value: _ffi.cursorModel),
           ChangeNotifierProvider.value(value: _ffi.canvasModel),
-          ChangeNotifierProvider.value(value: _ffi.recordingModel),
         ], child: buildBody(context)));
   }
 

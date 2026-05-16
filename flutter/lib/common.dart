@@ -32,11 +32,9 @@ import '../consts.dart';
 import 'common/widgets/overlay.dart';
 import 'mobile/pages/file_manager_page.dart';
 import 'mobile/pages/remote_page.dart';
-import 'mobile/pages/view_camera_page.dart';
 import 'mobile/pages/terminal_page.dart';
 import 'desktop/pages/remote_page.dart' as desktop_remote;
 import 'desktop/pages/file_manager_page.dart' as desktop_file_manager;
-import 'desktop/pages/view_camera_page.dart' as desktop_view_camera;
 import 'package:flutter_hbb/desktop/widgets/remote_toolbar.dart';
 import 'models/model.dart';
 import 'models/platform_model.dart';
@@ -106,7 +104,6 @@ enum DesktopType {
   main,
   remote,
   fileTransfer,
-  viewCamera,
   terminal,
   cm,
   portForward,
@@ -1842,8 +1839,7 @@ Future<void> _saveWindowPositionActual(WindowKey key) async {
     await bind.setLocalFlutterOption(
         k: windowFramePrefix + key.type.name, v: pos.toString());
 
-    if ((key.type == WindowType.RemoteDesktop ||
-            key.type == WindowType.ViewCamera) &&
+    if (key.type == WindowType.RemoteDesktop &&
         key.windowId != null) {
       await _saveSessionWindowPosition(key.type, key.windowId!,
           pos.isMaximized ?? false, pos.isFullscreen ?? false, pos);
@@ -1995,7 +1991,7 @@ Future<bool> restoreWindowPosition(WindowType type,
   String? pos;
   // No need to check mainGetLocalBoolOptionSync(kOptionOpenNewConnInTabs)
   // Though "open in tabs" is true and the new window restore peer position, it's ok.
-  if ((type == WindowType.RemoteDesktop || type == WindowType.ViewCamera) &&
+  if (type == WindowType.RemoteDesktop &&
       windowId != null &&
       peerId != null) {
     final peerPos = bind.mainGetPeerFlutterOptionSync(
@@ -2028,7 +2024,7 @@ Future<bool> restoreWindowPosition(WindowType type,
     }
     return true;
   }
-  if (type == WindowType.RemoteDesktop || type == WindowType.ViewCamera) {
+  if (type == WindowType.RemoteDesktop) {
     if (!isRemotePeerPos && windowId != null) {
       if (lpos.offsetWidth != null) {
         lpos.offsetWidth = lpos.offsetWidth! + windowId * kNewWindowOffset;
@@ -2197,7 +2193,6 @@ StreamSubscription? listenUniLinks({handleByFlutter = true}) {
 enum UriLinkType {
   remoteDesktop,
   fileTransfer,
-  viewCamera,
   portForward,
   rdp,
   terminal,
@@ -2254,11 +2249,6 @@ bool handleUriLink({List<String>? cmdArgs, Uri? uri, String? uriString}) {
         id = args[i + 1];
         i++;
         break;
-      case '--view-camera':
-        type = UriLinkType.viewCamera;
-        id = args[i + 1];
-        i++;
-        break;
       case '--port-forward':
         type = UriLinkType.portForward;
         id = args[i + 1];
@@ -2308,12 +2298,6 @@ bool handleUriLink({List<String>? cmdArgs, Uri? uri, String? uriString}) {
       case UriLinkType.fileTransfer:
         Future.delayed(Duration.zero, () {
           rustDeskWinManager.newFileTransfer(id!,
-              password: password, forceRelay: forceRelay);
-        });
-        break;
-      case UriLinkType.viewCamera:
-        Future.delayed(Duration.zero, () {
-          rustDeskWinManager.newViewCamera(id!,
               password: password, forceRelay: forceRelay);
         });
         break;
@@ -2444,9 +2428,6 @@ List<String>? urlLinkToCmdArgs(Uri uri) {
     if (command == '--file-transfer') {
       connect(Get.context!, id,
           isFileTransfer: true, forceRelay: forceRelay, password: password);
-    } else if (command == '--view-camera') {
-      connect(Get.context!, id,
-          isViewCamera: true, forceRelay: forceRelay, password: password);
     } else if (command == '--terminal') {
       connect(Get.context!, id,
           isTerminal: true, forceRelay: forceRelay, password: password);
@@ -2479,7 +2460,6 @@ List<String>? urlLinkToCmdArgs(Uri uri) {
 
 connectMainDesktop(String id,
     {required bool isFileTransfer,
-    required bool isViewCamera,
     required bool isTerminal,
     required bool isTcpTunneling,
     required bool isRDP,
@@ -2489,12 +2469,6 @@ connectMainDesktop(String id,
     bool? isSharedPassword}) async {
   if (isFileTransfer) {
     await rustDeskWinManager.newFileTransfer(id,
-        password: password,
-        isSharedPassword: isSharedPassword,
-        connToken: connToken,
-        forceRelay: forceRelay);
-  } else if (isViewCamera) {
-    await rustDeskWinManager.newViewCamera(id,
         password: password,
         isSharedPassword: isSharedPassword,
         connToken: connToken,
@@ -2521,12 +2495,10 @@ connectMainDesktop(String id,
 
 /// Connect to a peer with [id].
 /// If [isFileTransfer], starts a session only for file transfer.
-/// If [isViewCamera], starts a session only for view camera.
 /// If [isTcpTunneling], starts a session only for tcp tunneling.
 /// If [isRDP], starts a session only for rdp.
 connect(BuildContext context, String id,
     {bool isFileTransfer = false,
-    bool isViewCamera = false,
     bool isTerminal = false,
     bool isTcpTunneling = false,
     bool isRDP = false,
@@ -2559,7 +2531,6 @@ connect(BuildContext context, String id,
       await connectMainDesktop(
         id,
         isFileTransfer: isFileTransfer,
-        isViewCamera: isViewCamera,
         isTerminal: isTerminal,
         isTcpTunneling: isTcpTunneling,
         isRDP: isRDP,
@@ -2571,7 +2542,6 @@ connect(BuildContext context, String id,
       await rustDeskWinManager.call(WindowType.Main, kWindowConnect, {
         'id': id,
         'isFileTransfer': isFileTransfer,
-        'isViewCamera': isViewCamera,
         'isTerminal': isTerminal,
         'isTcpTunneling': isTcpTunneling,
         'isRDP': isRDP,
@@ -2606,33 +2576,6 @@ connect(BuildContext context, String id,
           context,
           MaterialPageRoute(
             builder: (BuildContext context) => FileManagerPage(
-                id: id,
-                password: password,
-                isSharedPassword: isSharedPassword,
-                forceRelay: forceRelay),
-          ),
-        );
-      }
-    } else if (isViewCamera) {
-      if (isWeb) {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (BuildContext context) =>
-                desktop_view_camera.ViewCameraPage(
-              key: ValueKey(id),
-              id: id,
-              toolbarState: ToolbarState(),
-              password: password,
-              isSharedPassword: isSharedPassword,
-            ),
-          ),
-        );
-      } else {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (BuildContext context) => ViewCameraPage(
                 id: id,
                 password: password,
                 isSharedPassword: isSharedPassword,
@@ -2989,8 +2932,6 @@ String getWindowName({WindowType? overrideType}) {
       return name;
     case WindowType.FileTransfer:
       return "File Transfer - $name";
-    case WindowType.ViewCamera:
-      return "View Camera - $name";
     case WindowType.PortForward:
       return "Port Forward - $name";
     case WindowType.RemoteDesktop:
@@ -3676,30 +3617,6 @@ Color? disabledTextColor(BuildContext context, bool enabled) {
   return enabled
       ? null
       : Theme.of(context).textTheme.titleLarge?.color?.withOpacity(0.6);
-}
-
-Widget loadPowered(BuildContext context) {
-  if (bind.mainGetBuildinOption(key: "hide-powered-by-me") == 'Y') {
-    return SizedBox.shrink();
-  }
-  return MouseRegion(
-    cursor: SystemMouseCursors.click,
-    child: GestureDetector(
-      onTap: () {
-        launchUrl(Uri.parse('https://rustdesk.com'));
-      },
-      child: Opacity(
-          opacity: 0.5,
-          child: Text(
-            translate("powered_by_me"),
-            overflow: TextOverflow.clip,
-            style: Theme.of(context)
-                .textTheme
-                .bodySmall
-                ?.copyWith(fontSize: 9, decoration: TextDecoration.underline),
-          )),
-    ),
-  ).marginOnly(top: 6);
 }
 
 // max 300 x 60

@@ -1321,37 +1321,6 @@ void showWaitAcceptDialog(SessionID sessionId, String type, String title,
   });
 }
 
-void showRestartRemoteDevice(PeerInfo pi, String id, SessionID sessionId,
-    OverlayDialogManager dialogManager) async {
-  final res = await dialogManager
-      .show<bool>((setState, close, context) => CustomAlertDialog(
-            title: Row(children: [
-              Icon(Icons.warning_rounded, color: Colors.redAccent, size: 28),
-              Flexible(
-                  child: Text(translate("Restart remote device"))
-                      .paddingOnly(left: 10)),
-            ]),
-            content: Text(
-                "${translate('Are you sure you want to restart')} \n${pi.username}@${pi.hostname}($id) ?"),
-            actions: [
-              dialogButton(
-                "Cancel",
-                icon: Icon(Icons.close_rounded),
-                onPressed: close,
-                isOutline: true,
-              ),
-              dialogButton(
-                "OK",
-                icon: Icon(Icons.done_rounded),
-                onPressed: () => close(true),
-              ),
-            ],
-            onCancel: close,
-            onSubmit: () => close(true),
-          ));
-  if (res == true) bind.sessionRestartRemoteDevice(sessionId: sessionId);
-}
-
 showSetOSPassword(
   SessionID sessionId,
   bool login,

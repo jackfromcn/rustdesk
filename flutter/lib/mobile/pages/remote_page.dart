@@ -112,11 +112,6 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
         .changeCurrentKey(MessageKey(widget.id, ChatModel.clientModeID));
     _blockableOverlayState.applyFfi(gFFI);
     gFFI.imageModel.addCallbackOnFirstImage((String peerId) {
-      gFFI.recordingModel
-          .updateStatus(bind.sessionGetIsRecording(sessionId: gFFI.sessionId));
-      if (gFFI.recordingModel.start) {
-        showToast(translate('Automatically record outgoing sessions'));
-      }
       _disableAndroidSoftKeyboard(
           isKeyboardVisible: keyboardVisibilityController.isVisible);
     });
@@ -1180,17 +1175,6 @@ void showOptions(
   List<TToggleMenu> displayToggles =
       await toolbarDisplayToggle(context, id, gFFI);
 
-  List<TToggleMenu> privacyModeList = [];
-  // privacy mode
-  final privacyModeState = PrivacyModeState.find(id);
-  if ((gFFI.ffiModel.pi.features.privacyMode && gFFI.ffiModel.keyboard) ||
-      privacyModeState.isNotEmpty) {
-    privacyModeList = toolbarPrivacyMode(privacyModeState, context, id, gFFI);
-    if (privacyModeList.length == 1) {
-      displayToggles.add(privacyModeList[0]);
-    }
-  }
-
   dialogManager.show((setState, close, context) {
     var viewStyle =
         (viewStyleRadios.isNotEmpty ? viewStyleRadios[0].groupValue : '').obs;
@@ -1279,17 +1263,6 @@ void showOptions(
       ...displayTogglesList,
     ];
 
-    Widget privacyModeWidget = Offstage();
-    if (privacyModeList.length > 1) {
-      privacyModeWidget = ListTile(
-        contentPadding: EdgeInsets.zero,
-        visualDensity: VisualDensity.compact,
-        title: Text(translate('Privacy mode')),
-        onTap: () => setPrivacyModeDialog(
-            dialogManager, privacyModeList, privacyModeState),
-      );
-    }
-
     var popupDialogMenus = List<Widget>.empty(growable: true);
     final resolution = getResolutionMenu(gFFI, id);
     if (resolution != null) {
@@ -1303,18 +1276,6 @@ void showOptions(
         },
       ));
     }
-    final virtualDisplayMenu = getVirtualDisplayMenu(gFFI, id);
-    if (virtualDisplayMenu != null) {
-      popupDialogMenus.add(ListTile(
-        contentPadding: EdgeInsets.zero,
-        visualDensity: VisualDensity.compact,
-        title: virtualDisplayMenu.child,
-        onTap: () {
-          close();
-          virtualDisplayMenu.onPressed?.call();
-        },
-      ));
-    }
     if (popupDialogMenus.isNotEmpty) {
       popupDialogMenus.add(const Divider(color: MyTheme.border));
     }
@@ -1325,35 +1286,11 @@ void showOptions(
           children: displays +
               radios +
               popupDialogMenus +
-              toggles +
-              [privacyModeWidget]),
+              toggles,
     );
   }, clickMaskDismiss: true, backDismiss: true).then((value) {
     _disableAndroidSoftKeyboard();
   });
-}
-
-TTextMenu? getVirtualDisplayMenu(FFI ffi, String id) {
-  if (!showVirtualDisplayMenu(ffi)) {
-    return null;
-  }
-  return TTextMenu(
-    child: Text(translate("Virtual display")),
-    onPressed: () {
-      ffi.dialogManager.show((setState, close, context) {
-        final children = getVirtualDisplayMenuChildren(ffi, id, close);
-        return CustomAlertDialog(
-          title: Text(translate('Virtual display')),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: children,
-          ),
-        );
-      }, clickMaskDismiss: true, backDismiss: true).then((value) {
-        _disableAndroidSoftKeyboard();
-      });
-    },
-  );
 }
 
 TTextMenu? getResolutionMenu(FFI ffi, String id) {

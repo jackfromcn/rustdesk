@@ -178,29 +178,6 @@ class _ToolbarTheme {
 typedef DismissFunc = void Function();
 
 class RemoteMenuEntry {
-  static MenuEntryButton<String> insertLock(
-    SessionID sessionId,
-    EdgeInsets? padding, {
-    DismissFunc? dismissFunc,
-    DismissCallback? dismissCallback,
-  }) {
-    return MenuEntryButton<String>(
-      childBuilder: (TextStyle? style) => Text(
-        translate('Insert Lock'),
-        style: style,
-      ),
-      proc: () {
-        bind.sessionLockScreen(sessionId: sessionId);
-        if (dismissFunc != null) {
-          dismissFunc();
-        }
-      },
-      padding: padding,
-      dismissOnClicked: true,
-      dismissCallback: dismissCallback,
-    );
-  }
-
   static insertCtrlAltDel(
     SessionID sessionId,
     EdgeInsets? padding, {
@@ -376,8 +353,7 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
     }
 
     toolbarItems.add(Obx(() {
-      if (PrivacyModeState.find(widget.id).isEmpty &&
-          pi.displaysCount.value > 1) {
+      if (pi.displaysCount.value > 1) {
         return _MonitorMenu(
             id: widget.id,
             ffi: widget.ffi,
@@ -403,7 +379,6 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
     if (!isWeb) {
       toolbarItems.add(_VoiceCallMenu(id: widget.id, ffi: widget.ffi));
     }
-    if (!isWeb) toolbarItems.add(_RecordMenu());
     toolbarItems.add(_CloseMenu(id: widget.id, ffi: widget.ffi));
     final toolbarBorderRadius = BorderRadius.all(Radius.circular(4.0));
     return Column(
@@ -985,45 +960,10 @@ class _DisplayMenuState extends State<_DisplayMenu> {
             ffi: widget.ffi,
             screenAdjustor: _screenAdjustor,
           ),
-        if (showVirtualDisplayMenu(ffi) && ffi.connType == ConnType.defaultConn)
-          _SubmenuButton(
-            ffi: widget.ffi,
-            menuChildren: getVirtualDisplayMenuChildren(ffi, id, null),
-            child: Text(translate("Virtual display")),
-          ),
         if (ffi.connType == ConnType.defaultConn) cursorToggles(),
         Divider(),
         toggles(),
       ];
-      // privacy mode
-      final privacyModeState = PrivacyModeState.find(id);
-      if (ffi.connType == ConnType.defaultConn &&
-          (pi.features.privacyMode || privacyModeState.isNotEmpty) &&
-          (ffiModel.keyboard || privacyModeState.isNotEmpty)) {
-        final privacyModeList =
-            toolbarPrivacyMode(privacyModeState, context, id, ffi);
-        if (privacyModeList.length == 1) {
-          menuChildren.add(CkbMenuButton(
-              value: privacyModeList[0].value,
-              onChanged: privacyModeList[0].onChanged,
-              child: privacyModeList[0].child,
-              ffi: ffi));
-        } else if (privacyModeList.length > 1) {
-          menuChildren.addAll([
-            Divider(),
-            _SubmenuButton(
-                ffi: widget.ffi,
-                child: Text(translate('Privacy mode')),
-                menuChildren: privacyModeList
-                    .map((e) => CkbMenuButton(
-                        value: e.value,
-                        onChanged: e.onChanged,
-                        child: e.child,
-                        ffi: ffi))
-                    .toList()),
-          ]);
-        }
-      }
       if (ffi.connType == ConnType.defaultConn) {
         menuChildren.add(widget.pluginItem);
       }
@@ -1492,9 +1432,8 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
 
   @override
   Widget build(BuildContext context) {
-    final isVirtualDisplay = ffiModel.isVirtualDisplayResolution;
     final visible = ffiModel.keyboard &&
-        (isVirtualDisplay || resolutions.length > 1) &&
+        resolutions.length > 1 &&
         pi.currentDisplay != kAllDisplayValue;
     if (!visible) return Offstage();
     final showOriginalBtn =
@@ -1506,8 +1445,7 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
       menuChildren: <Widget>[
             _OriginalResolutionMenuButton(context, showOriginalBtn),
             _FitLocalResolutionMenuButton(context, showFitLocalBtn),
-            _customResolutionMenuButton(context, isVirtualDisplay),
-            _menuDivider(showOriginalBtn, showFitLocalBtn, isVirtualDisplay),
+            _menuDivider(showOriginalBtn, showFitLocalBtn),
           ] +
           _supportedResolutionMenuButtons(),
       child: Text(translate("Resolution")),
@@ -1528,10 +1466,9 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
     }
   }
 
-  _menuDivider(
-      bool showOriginalBtn, bool showFitLocalBtn, bool isVirtualDisplay) {
+  _menuDivider(bool showOriginalBtn, bool showFitLocalBtn) {
     return Offstage(
-      offstage: !(showOriginalBtn || showFitLocalBtn || isVirtualDisplay),
+      offstage: !(showOriginalBtn || showFitLocalBtn),
       child: Divider(),
     );
   }
@@ -1666,32 +1603,6 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
     );
   }
 
-  Widget _customResolutionMenuButton(BuildContext context, isVirtualDisplay) {
-    return Offstage(
-      offstage: !isVirtualDisplay,
-      child: RdoMenuButton(
-        value: _kCustomResolutionValue,
-        groupValue: _groupValue,
-        onChanged: (String? value) => _onChanged(value),
-        ffi: widget.ffi,
-        child: Row(
-          children: [
-            Text('${translate('resolution_custom_tip')} '),
-            SizedBox(
-              width: _kCustomResolutionEditingWidth,
-              child: _resolutionInput(_customWidth),
-            ),
-            Text(' x '),
-            SizedBox(
-              width: _kCustomResolutionEditingWidth,
-              child: _resolutionInput(_customHeight),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _resolutionInput(TextEditingController controller) {
     return TextField(
       decoration: InputDecoration(
@@ -1721,10 +1632,6 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
   Resolution? _getBestFitResolution() {
     if (_localResolution == null) {
       return null;
-    }
-
-    if (ffiModel.isVirtualDisplayResolution) {
-      return _localResolution!;
     }
 
     for (final r in resolutions) {
@@ -2181,32 +2088,6 @@ class _VoiceCallMenu extends StatelessWidget {
       onPressed: () => bind.sessionCloseVoiceCall(sessionId: ffi.sessionId),
       color: _ToolbarTheme.redColor,
       hoverColor: _ToolbarTheme.hoverRedColor,
-    );
-  }
-}
-
-class _RecordMenu extends StatelessWidget {
-  const _RecordMenu({Key? key}) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    var ffi = Provider.of<FfiModel>(context);
-    var recordingModel = Provider.of<RecordingModel>(context);
-    final visible =
-        (recordingModel.start || ffi.permissions['recording'] != false);
-    if (!visible) return Offstage();
-    return _IconMenuButton(
-      assetName: 'assets/rec.svg',
-      tooltip: recordingModel.start
-          ? 'Stop session recording'
-          : 'Start session recording',
-      onPressed: () => recordingModel.toggle(),
-      color: recordingModel.start
-          ? _ToolbarTheme.redColor
-          : _ToolbarTheme.blueColor,
-      hoverColor: recordingModel.start
-          ? _ToolbarTheme.hoverRedColor
-          : _ToolbarTheme.hoverBlueColor,
     );
   }
 }

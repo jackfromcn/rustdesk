@@ -1,0 +1,4 @@
+# cbindgen configuration for RustDesk FFI
+
+include_guard = "RUSTDESK_FFI_H"
+pragma_once = true

@@ -1,9 +1,7 @@
 use super::{CursorData, ResultType};
 use crate::{
     common::PORTABLE_APPNAME_RUNTIME_ENV_KEY,
-    custom_server::*,
     ipc,
-    privacy_mode::win_topmost_window::{self, WIN_TOPMOST_INJECTED_PROCESS_EXE},
 };
 use hbb_common::{
     allow_err,
@@ -87,6 +85,11 @@ use windows_service::{
     service_control_handler::{self, ServiceControlHandlerResult},
 };
 use winreg::{enums::*, RegKey};
+
+// Broker process executable name (used for privacy mode window management)
+const WIN_TOPMOST_INJECTED_PROCESS_EXE: &str = "RustDeskBroker.exe";
+const ORIGIN_PROCESS_EXE: &str = "RustDeskBroker.exe";
+const INJECTED_PROCESS_EXE: &str = "RustDeskBroker.exe";
 
 pub const FLUTTER_RUNNER_WIN32_WINDOW_CLASS: &'static str = "FLUTTER_RUNNER_WIN32_WINDOW"; // main window, install window
 pub const EXPLORER_EXE: &'static str = "explorer.exe";
@@ -1266,51 +1269,6 @@ fn get_default_install_path() -> String {
     format!("{}\\{}", pf, crate::get_app_name())
 }
 
-pub fn check_update_broker_process() -> ResultType<()> {
-    let process_exe = win_topmost_window::INJECTED_PROCESS_EXE;
-    let origin_process_exe = win_topmost_window::ORIGIN_PROCESS_EXE;
-
-    let exe_file = std::env::current_exe()?;
-    let Some(cur_dir) = exe_file.parent() else {
-        bail!("Cannot get parent of current exe file");
-    };
-    let cur_exe = cur_dir.join(process_exe);
-
-    // Force update broker exe if failed to check modified time.
-    let cmds = format!(
-        "
-        chcp 65001
-        taskkill /F /IM {process_exe}
-        copy /Y \"{origin_process_exe}\" \"{cur_exe}\"
-    ",
-        cur_exe = cur_exe.to_string_lossy(),
-    );
-
-    if !std::path::Path::new(&cur_exe).exists() {
-        run_cmds(cmds, false, "update_broker")?;
-        return Ok(());
-    }
-
-    let ori_modified = fs::metadata(origin_process_exe)?.modified()?;
-    if let Ok(metadata) = fs::metadata(&cur_exe) {
-        if let Ok(cur_modified) = metadata.modified() {
-            if cur_modified == ori_modified {
-                return Ok(());
-            } else {
-                log::info!(
-                    "broker process updated, modify time from {:?} to {:?}",
-                    cur_modified,
-                    ori_modified
-                );
-            }
-        }
-    }
-
-    run_cmds(cmds, false, "update_broker")?;
-
-    Ok(())
-}
-
 fn get_install_info_with_subkey(subkey: String) -> (String, String, String, String) {
     let mut path = get_reg_of(&subkey, "InstallLocation");
     if path.is_empty() {
@@ -1345,8 +1303,8 @@ pub fn copy_exe_cmd(src_exe: &str, exe: &str, path: &str) -> ResultType<String> 
         {main_exe}
         copy /Y \"{ORIGIN_PROCESS_EXE}\" \"{path}\\{broker_exe}\"
         ",
-        ORIGIN_PROCESS_EXE = win_topmost_window::ORIGIN_PROCESS_EXE,
-        broker_exe = win_topmost_window::INJECTED_PROCESS_EXE,
+        ORIGIN_PROCESS_EXE = ORIGIN_PROCESS_EXE,
+        broker_exe = INJECTED_PROCESS_EXE,
     ))
 }
 
@@ -1510,7 +1468,6 @@ oLink.Save
     .to_str()
     .unwrap_or("")
     .to_owned();
-    let tray_shortcut = get_tray_shortcut(&path, &exe, &cur_exe, &tmp_path)?;
     let mut reg_value_desktop_shortcuts = "0".to_owned();
     let mut reg_value_start_menu_shortcuts = "0".to_owned();
     let mut reg_value_printer = "0".to_owned();
@@ -1553,39 +1510,13 @@ copy /Y \"{tmp_path}\\Uninstall {app_name}.lnk\" \"{start_menu}\\\"
         "
 if exist \"{mk_shortcut}\" del /f /q \"{mk_shortcut}\"
 if exist \"{uninstall_shortcut}\" del /f /q \"{uninstall_shortcut}\"
-if exist \"{tray_shortcut}\" del /f /q \"{tray_shortcut}\"
 if exist \"{tmp_path}\\{app_name}.lnk\" del /f /q \"{tmp_path}\\{app_name}.lnk\"
 if exist \"{tmp_path}\\Uninstall {app_name}.lnk\" del /f /q \"{tmp_path}\\Uninstall {app_name}.lnk\"
-if exist \"{tmp_path}\\{app_name} Tray.lnk\" del /f /q \"{tmp_path}\\{app_name} Tray.lnk\"
         "
     );
     let src_exe = std::env::current_exe()?.to_str().unwrap_or("").to_string();
 
     // potential bug here: if run_cmd cancelled, but config file is changed.
-    if let Some(lic) = get_license() {
-        Config::set_option("key".into(), lic.key);
-        Config::set_option("custom-rendezvous-server".into(), lic.host);
-        Config::set_option("api-server".into(), lic.api);
-    }
-
-    let tray_shortcuts = if config::is_outgoing_only() {
-        "".to_owned()
-    } else {
-        format!("
-cscript \"{tray_shortcut}\"
-copy /Y \"{tmp_path}\\{app_name} Tray.lnk\" \"%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\\"
-")
-    };
-
-    let install_remote_printer = if install_printer {
-        // No need to use `|| true` here.
-        // The script will not exit even if `--install-remote-printer` panics.
-        format!("\"{}\" --install-remote-printer", &src_exe)
-    } else if is_win_10_or_greater() {
-        format!("\"{}\" --uninstall-remote-printer", &src_exe)
-    } else {
-        "".to_owned()
-    };
 
     // Remember to check if `update_me` need to be changed if changing the `cmds`.
     // No need to merge the existing dup code, because the code in these two functions are too critical.
@@ -1612,13 +1543,11 @@ reg add {subkey} /f /v EstimatedSize /t REG_DWORD /d {size}
 reg add {subkey} /f /v WindowsInstaller /t REG_DWORD /d 0
 cscript \"{mk_shortcut}\"
 cscript \"{uninstall_shortcut}\"
-{tray_shortcuts}
 {shortcuts}
 copy /Y \"{tmp_path}\\Uninstall {app_name}.lnk\" \"{path}\\\"
 {dels}
 {import_config}
 {after_install}
-{install_remote_printer}
 {sleep}
     ",
         display_icon = get_custom_icon(&path, &cur_exe).unwrap_or(exe.to_string()),
@@ -1695,20 +1624,15 @@ fn get_uninstall(kill_self: bool, uninstall_printer: bool) -> String {
     }
 
     let mut uninstall_cert_cmd = "".to_string();
-    let mut uninstall_printer_cmd = "".to_string();
     if let Ok(exe) = std::env::current_exe() {
         if let Some(exe_path) = exe.to_str() {
             uninstall_cert_cmd = format!("\"{}\" --uninstall-cert", exe_path);
-            if uninstall_printer {
-                uninstall_printer_cmd = format!("\"{}\" --uninstall-remote-printer", &exe_path);
-            }
         }
     }
     let (subkey, path, start_menu, _) = get_install_info();
     format!(
         "
     {before_uninstall}
-    {uninstall_printer_cmd}
     {uninstall_cert_cmd}
     reg delete {subkey} /f
     {uninstall_amyuni_idd}
@@ -2014,15 +1938,6 @@ pub fn prepare_custom_client_update() -> ResultType<bool> {
     Ok(true)
 }
 
-pub fn get_license_from_exe_name() -> ResultType<CustomServer> {
-    let mut exe = std::env::current_exe()?.to_str().unwrap_or("").to_owned();
-    // if defined portable appname entry, replace original executable name with it.
-    if let Ok(portable_exe) = std::env::var(PORTABLE_APPNAME_RUNTIME_ENV_KEY) {
-        exe = portable_exe;
-    }
-    get_custom_server_from_string(&exe)
-}
-
 // We can't directly use `RegKey::set_value` to update the registry value, because it will fail with `ERROR_ACCESS_DENIED`
 // So we have to use `run_cmds` to update the registry value.
 pub fn update_install_option(k: &str, v: &str) -> ResultType<()> {
@@ -2052,10 +1967,6 @@ pub fn is_win_10_or_greater() -> bool {
 }
 
 pub fn bootstrap() -> bool {
-    if let Ok(lic) = get_license_from_exe_name() {
-        *config::EXE_RENDEZVOUS_SERVER.write().unwrap() = lic.host.clone();
-    }
-
     #[cfg(debug_assertions)]
     {
         true
@@ -2962,8 +2873,6 @@ pub fn install_service() -> bool {
     log::info!("Installing service...");
     let _installing = crate::platform::InstallingService::new();
     let (_, path, _, exe) = get_install_info();
-    let tmp_path = std::env::temp_dir().to_string_lossy().to_string();
-    let tray_shortcut = get_tray_shortcut(&path, &exe, &exe, &tmp_path).unwrap_or_default();
     let filter = format!(" /FI \"PID ne {}\"", get_current_pid());
     Config::set_option("stop-service".into(), "".into());
     crate::ipc::EXIT_RECV_CLOSE.store(false, Ordering::Relaxed);
@@ -2971,11 +2880,8 @@ pub fn install_service() -> bool {
         "
 chcp 65001
 taskkill /F /IM {app_name}.exe{filter}
-cscript \"{tray_shortcut}\"
-copy /Y \"{tmp_path}\\{app_name} Tray.lnk\" \"%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\\"
 {import_config}
 {create_service}
-if exist \"{tray_shortcut}\" del /f /q \"{tray_shortcut}\"
     ",
         app_name = crate::get_app_name(),
         import_config = get_import_config(&exe),
@@ -3047,13 +2953,6 @@ pub fn update_me(debug: bool) -> ResultType<()> {
         .flatten()
         .collect::<Vec<_>>();
     kill_process_by_pids(&app_exe_name, main_window_pids)?;
-    let tray_pids = crate::platform::get_pids_of_process_with_args(&app_exe_name, &["--tray"]);
-    let tray_sessions = tray_pids
-        .iter()
-        .map(|pid| get_session_id_of_process(pid.as_u32()))
-        .flatten()
-        .collect::<Vec<_>>();
-    kill_process_by_pids(&app_exe_name, tray_pids)?;
     let is_service_running = is_self_service_running();
 
     let mut version_major = "0";
@@ -3147,18 +3046,6 @@ reg add {subkey} /f /v EstimatedSize /t REG_DWORD /d {size}
         "".to_owned()
     };
 
-    // No need to check the install option here, `is_rd_printer_installed` rarely fails.
-    let is_printer_installed = remote_printer::is_rd_printer_installed(&app_name).unwrap_or(false);
-    // Do nothing if the printer is not installed or failed to query if the printer is installed.
-    let (uninstall_printer_cmd, install_printer_cmd) = if is_printer_installed {
-        (
-            format!("\"{}\" --uninstall-remote-printer", &src_exe),
-            format!("\"{}\" --install-remote-printer", &src_exe),
-        )
-    } else {
-        ("".to_owned(), "".to_owned())
-    };
-
     // We do not try to remove all files in the old version.
     // Because I don't know whether additional files will be installed here after installation, such as drivers.
     // Just copy files to the installation directory works fine.
@@ -3167,9 +3054,9 @@ reg add {subkey} /f /v EstimatedSize /t REG_DWORD /d {size}
     //
     // We need `taskkill` because:
     // 1. There may be some other processes like `rustdesk --connect` are running.
-    // 2. Sometimes, the main window and the tray icon are showing
+    // 2. Sometimes, the main window is showing
     // while I cannot find them by `tasklist` or the methods above.
-    // There's should be 4 processes running: service, server, tray and main window.
+    // There's should be 3 processes running: service, server, and main window.
     // But only 2 processes are shown in the tasklist.
     let cmds = format!(
         "
@@ -3181,8 +3068,6 @@ taskkill /F /IM {app_name}.exe{filter}
 {rename_exe}
 {remove_meta_toml}
 {restore_service_cmd}
-{uninstall_printer_cmd}
-{install_printer_cmd}
 {sleep}
     ",
         app_name = app_name,
@@ -3195,36 +3080,6 @@ taskkill /F /IM {app_name}.exe{filter}
     let _restore_session_guard = crate::common::SimpleCallOnReturn {
         b: true,
         f: Box::new(move || {
-            let is_root = is_root();
-            if tray_sessions.is_empty() {
-                log::info!("No tray process found.");
-            } else {
-                log::info!(
-                    "Try to restore the tray process..., sessions: {:?}",
-                    &tray_sessions
-                );
-                // When not running as root, only spawn once since run_exe_direct
-                // doesn't target specific sessions.
-                let mut spawned_non_root_tray = false;
-                for s in tray_sessions.clone().into_iter() {
-                    if s != 0 {
-                        // We need to check if is_root here because if `update_me()` is called from
-                        // the main window running with administrator permission,
-                        // `run_exe_in_session()` will fail with error 1314 ("A required privilege is
-                        // not held by the client").
-                        //
-                        // This issue primarily affects the MSI-installed version running in Administrator
-                        // session during testing, but we check permissions here to be safe.
-                        if is_root {
-                            allow_err!(run_exe_in_session(&exe, vec!["--tray"], s, true));
-                        } else if !spawned_non_root_tray {
-                            // Only spawn once for non-root since run_exe_direct doesn't take session parameter
-                            allow_err!(run_exe_direct(&exe, vec!["--tray"], false));
-                            spawned_non_root_tray = true;
-                        }
-                    }
-                }
-            }
             if main_window_sessions.is_empty() {
                 log::info!("No main window process found.");
             } else {
@@ -3411,52 +3266,13 @@ pub fn update_to(file: &str) -> ResultType<()> {
     Ok(())
 }
 
-// Don't launch tray app when running with `\qn`.
-// 1. Because `/qn` requires administrator permission and the tray app should be launched with user permission.
-//   Or launching the main window from the tray app will cause the main window to be launched with administrator permission.
-// 2. We are not able to launch the tray app if the UI is in the login screen.
-// `fn update_me()` can handle the above cases, but for msi update, we need to do more work to handle the above cases.
-//    1. Record the tray app session ids.
-//    2. Do the update.
-//    3. Restore the tray app sessions.
-//    `1` and `3` must be done in custom actions.
-//    We need also to handle the command line parsing to find the tray processes.
 pub fn update_me_msi(msi: &str, quiet: bool) -> ResultType<()> {
     let cmds = format!(
         "chcp 65001 && msiexec /i {msi} {}",
-        if quiet { "/qn LAUNCH_TRAY_APP=N" } else { "" }
+        if quiet { "/qn" } else { "" }
     );
     run_cmds(cmds, false, "update-msi")?;
     Ok(())
-}
-
-pub fn get_tray_shortcut(
-    install_dir: &str,
-    exe: &str,
-    icon_source_exe: &str,
-    tmp_path: &str,
-) -> ResultType<String> {
-    let shortcut_icon_location = get_shortcut_icon_location(install_dir, icon_source_exe);
-    Ok(write_cmds(
-        format!(
-            "
-Set oWS = WScript.CreateObject(\"WScript.Shell\")
-sLinkFile = \"{tmp_path}\\{app_name} Tray.lnk\"
-
-Set oLink = oWS.CreateShortcut(sLinkFile)
-    oLink.TargetPath = \"{exe}\"
-    oLink.Arguments = \"--tray\"
-    {shortcut_icon_location}
-oLink.Save
-        ",
-            app_name = crate::get_app_name(),
-        ),
-        "vbs",
-        "tray_shortcut",
-    )?
-    .to_str()
-    .unwrap_or("")
-    .to_owned())
 }
 
 fn get_import_config(exe: &str) -> String {
@@ -3483,7 +3299,6 @@ fn get_create_service(exe: &str) -> String {
     let stop = Config::get_option("stop-service") == "Y";
     if stop {
         format!("
-if exist \"%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\{app_name} Tray.lnk\" del /f /q \"%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\{app_name} Tray.lnk\"
 ", app_name = crate::get_app_name())
     } else {
         format!("
@@ -3502,9 +3317,6 @@ fn run_after_run_cmds(silent: bool) {
             .args(&["/c", "timeout", "/t", "2", "&", &format!("{exe}")])
             .creation_flags(winapi::um::winbase::CREATE_NO_WINDOW)
             .spawn());
-    }
-    if Config::get_option("stop-service") != "Y" {
-        allow_err!(std::process::Command::new(&exe).arg("--tray").spawn());
     }
     std::thread::sleep(std::time::Duration::from_millis(300));
 }
@@ -3600,22 +3412,6 @@ pub fn alloc_console() {
     unsafe {
         alloc_console_and_redirect();
     }
-}
-
-fn get_license() -> Option<CustomServer> {
-    let mut lic: CustomServer = Default::default();
-    if let Ok(tmp) = get_license_from_exe_name() {
-        lic = tmp;
-    } else {
-        // for back compatibility from migrating from <= 1.2.1 to 1.2.2
-        lic.key = get_reg("Key");
-        lic.host = get_reg("Host");
-        lic.api = get_reg("Api");
-    }
-    if lic.key.is_empty() || lic.host.is_empty() {
-        return None;
-    }
-    Some(lic)
 }
 
 pub struct WallPaperRemover {
@@ -4143,7 +3939,7 @@ fn get_pids_with_args_from_wmic_output<S2: AsRef<str>>(
     // CommandLine=
     // ProcessId=34668
     //
-    // CommandLine="C:\Program Files\RustDesk\RustDesk.exe" --tray
+    // CommandLine="C:\Program Files\RustDesk\RustDesk.exe" --connect
     // ProcessId=13728
     //
     // CommandLine="C:\Program Files\RustDesk\RustDesk.exe"
@@ -4304,14 +4100,14 @@ ProcessId=33796
 CommandLine=
 ProcessId=34668
 
-CommandLine="C:\Program Files\testapp\TestApp.exe" --tray
+CommandLine="C:\Program Files\testapp\TestApp.exe" --connect
 ProcessId=13728
 
 CommandLine="C:\Program Files\testapp\TestApp.exe"
 ProcessId=10136
 "#;
         let name = "testapp.exe";
-        let args = vec!["--tray"];
+        let args = vec!["--connect"];
         let pids = super::get_pids_with_args_from_wmic_output(
             String::from_utf8_lossy(output.as_bytes()),
             name,
@@ -4348,14 +4144,14 @@ ProcessId=33796
 CommandLine=
 ProcessId=34668
 
-CommandLine="C:\Program Files\testapp\TestApp.exe" --tray
+CommandLine="C:\Program Files\testapp\TestApp.exe" --connect
 ProcessId=13728
 
 CommandLine="C:\Program Files\testapp\TestApp.exe"
 ProcessId=10136
     "#;
         let name = "testapp.exe";
-        let arg = "--tray";
+        let arg = "--connect";
         let pids = super::get_pids_with_first_arg_from_wmic_output(
             String::from_utf8_lossy(output.as_bytes()),
             name,

@@ -84,7 +84,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       if (bind.isCustomClient())
         Align(
           alignment: Alignment.center,
-          child: loadPowered(context),
+          child: loadLogo(),
         ),
       Align(
         alignment: Alignment.center,
@@ -802,7 +802,6 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         await connectMainDesktop(
           call.arguments['id'],
           isFileTransfer: call.arguments['isFileTransfer'],
-          isViewCamera: call.arguments['isViewCamera'],
           isTerminal: call.arguments['isTerminal'],
           isTcpTunneling: call.arguments['isTcpTunneling'],
           isRDP: call.arguments['isRDP'],

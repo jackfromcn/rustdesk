@@ -48,54 +48,7 @@ class UserModel {
   }
 
   void refreshCurrentUser() async {
-    if (bind.isDisableAccount()) return;
-    networkError.value = '';
-    final token = bind.mainGetLocalOption(key: 'access_token');
-    if (token == '') {
-      await updateOtherModels();
-      return;
-    }
-    _updateLocalUserInfo();
-    final url = await bind.mainGetApiServer();
-    final body = {
-      'id': await bind.mainGetMyId(),
-      'uuid': await bind.mainGetUuid()
-    };
-    if (refreshingUser) return;
-    try {
-      refreshingUser = true;
-      final http.Response response;
-      try {
-        response = await http.post(Uri.parse('$url/api/currentUser'),
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': 'Bearer $token'
-            },
-            body: json.encode(body));
-      } catch (e) {
-        networkError.value = e.toString();
-        rethrow;
-      }
-      refreshingUser = false;
-      final status = response.statusCode;
-      if (status == 401 || status == 400) {
-        reset(resetOther: status == 401);
-        return;
-      }
-      final data = json.decode(decode_http_response(response));
-      final error = data['error'];
-      if (error != null) {
-        throw error;
-      }
-
-      final user = UserPayload.fromJson(data);
-      _parseAndUpdateUser(user);
-    } catch (e) {
-      debugPrint('Failed to refreshCurrentUser: $e');
-    } finally {
-      refreshingUser = false;
-      await updateOtherModels();
-    }
+    return; // Account system disabled
   }
 
   static Map<String, dynamic>? getLocalUserInfo() {

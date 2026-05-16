@@ -1633,7 +1633,6 @@ mod desktop {
         }
 
         fn get_display_xauth_xwayland(&mut self) {
-            let tray = format!("{} +--tray", crate::get_app_name().to_lowercase());
             for _ in 1..=10 {
                 let display_proc = vec![
                     XDG_DESKTOP_PORTAL,
@@ -1641,7 +1640,6 @@ mod desktop {
                     IBUS_DAEMON,
                     GNOME_GOA_DAEMON,
                     PLASMA_KDED,
-                    tray.as_str(),
                 ];
                 for proc in display_proc {
                     self.display = get_env(ENV_KEY_DISPLAY, &self.uid, proc);
@@ -1743,7 +1741,6 @@ mod desktop {
 
         fn get_xauth_x11(&mut self) {
             // try by direct access to window manager process by name
-            let tray = format!("{} +--tray", crate::get_app_name().to_lowercase());
             for _ in 1..=10 {
                 let display_proc = vec![
                     XWAYLAND,
@@ -1752,7 +1749,6 @@ mod desktop {
                     PLASMA_KDED,
                     XFCE4_PANEL,
                     SDDM_GREETER,
-                    tray.as_str(),
                 ];
                 for proc in display_proc {
                     self.xauth = get_env("XAUTHORITY", &self.uid, proc);
@@ -2012,7 +2008,7 @@ pub fn uninstall_service(show_new_window: bool, _: bool) -> bool {
     log::info!("Uninstalling service...");
     let cp = switch_service(true);
     let app_name = crate::get_app_name().to_lowercase();
-    // systemctl kill rustdesk --tray, execute cp first
+    // systemctl kill rustdesk, execute cp first
     if !run_cmds_privileged(&format!(
         "{cp} systemctl disable {app_name}; systemctl stop {app_name};"
     )) {
@@ -2076,7 +2072,7 @@ pub fn check_autostart_config() -> ResultType<()> {
                     "
     [Desktop Entry]
     Type=Application
-    Exec={app_name} --tray
+    Exec={app_name}
     NoDisplay=false
             "
                 )

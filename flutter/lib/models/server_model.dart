@@ -550,17 +550,14 @@ class ServerModel with ChangeNotifier {
           _clients.add(client);
         } else {
           if (_clients[index].authorized) {
-            _clients[index].privacyMode = client.privacyMode;
             notifyListeners();
             return;
           }
           _clients[index].authorized = true;
-          _clients[index].privacyMode = client.privacyMode;
         }
       } else {
         final index = _clients.indexWhere((c) => c.id == client.id);
         if (index >= 0) {
-          _clients[index].privacyMode = client.privacyMode;
           notifyListeners();
           return;
         }
@@ -612,11 +609,9 @@ class ServerModel with ChangeNotifier {
       client,
       client.isFileTransfer
           ? "Transfer file"
-          : client.isViewCamera
-              ? "View camera"
-              : client.isTerminal
-                  ? "Terminal"
-                  : "Share screen",
+          : client.isTerminal
+              ? "Terminal"
+              : "Share screen",
       'Do you accept?',
       'android_new_connection_tip',
       () => sendLoginResponse(client, false),
@@ -814,7 +809,6 @@ class Client {
   int id = 0; // client connections inner count id
   bool authorized = false;
   bool isFileTransfer = false;
-  bool isViewCamera = false;
   bool isTerminal = false;
   String portForward = "";
   String name = "";
@@ -825,9 +819,7 @@ class Client {
   bool audio = false;
   bool file = false;
   bool restart = false;
-  bool recording = false;
   bool blockInput = false;
-  bool privacyMode = false;
   bool disconnected = false;
   bool fromSwitch = false;
   bool inVoiceCall = false;
@@ -835,15 +827,13 @@ class Client {
 
   RxInt unreadChatMessageCount = 0.obs;
 
-  Client(this.id, this.authorized, this.isFileTransfer, this.isViewCamera,
+  Client(this.id, this.authorized, this.isFileTransfer,
       this.name, this.peerId, this.keyboard, this.clipboard, this.audio);
 
   Client.fromJson(Map<String, dynamic> json) {
     id = json['id'];
     authorized = json['authorized'];
     isFileTransfer = json['is_file_transfer'];
-    // TODO: no entry then default.
-    isViewCamera = json['is_view_camera'];
     isTerminal = json['is_terminal'] ?? false;
     portForward = json['port_forward'];
     name = json['name'];
@@ -854,9 +844,7 @@ class Client {
     audio = json['audio'];
     file = json['file'];
     restart = json['restart'];
-    recording = json['recording'];
     blockInput = json['block_input'];
-    privacyMode = json['privacy_mode'] ?? privacyMode;
     disconnected = json['disconnected'];
     fromSwitch = json['from_switch'];
     inVoiceCall = json['in_voice_call'];
@@ -868,7 +856,6 @@ class Client {
     data['id'] = id;
     data['authorized'] = authorized;
     data['is_file_transfer'] = isFileTransfer;
-    data['is_view_camera'] = isViewCamera;
     data['is_terminal'] = isTerminal;
     data['port_forward'] = portForward;
     data['name'] = name;
@@ -879,9 +866,7 @@ class Client {
     data['audio'] = audio;
     data['file'] = file;
     data['restart'] = restart;
-    data['recording'] = recording;
     data['block_input'] = blockInput;
-    data['privacy_mode'] = privacyMode;
     data['disconnected'] = disconnected;
     data['from_switch'] = fromSwitch;
     data['in_voice_call'] = inVoiceCall;
@@ -892,8 +877,6 @@ class Client {
   ClientType type_() {
     if (isFileTransfer) {
       return ClientType.file;
-    } else if (isViewCamera) {
-      return ClientType.camera;
     } else if (isTerminal) {
       return ClientType.terminal;
     } else if (portForward.isNotEmpty) {

@@ -85,22 +85,6 @@ impl SciterHandler {
                     serde_json::Value::Bool(b) => {
                         value.set_item(k, b);
                     }
-                    serde_json::Value::Array(arr) if k == "supported_privacy_mode_impl" => {
-                        let mut impls = Value::array(0);
-                        for item in arr {
-                            if let serde_json::Value::Array(entry) = item {
-                                let impl_key = entry.get(0).and_then(|v| v.as_str());
-                                let impl_name = entry.get(1).and_then(|v| v.as_str());
-                                if let (Some(impl_key), Some(impl_name)) = (impl_key, impl_name) {
-                                    let mut impl_item = Value::array(0);
-                                    impl_item.push(impl_key);
-                                    impl_item.push(impl_name);
-                                    impls.push(impl_item);
-                                }
-                            }
-                        }
-                        value.set_item(k, impls);
-                    }
                     _ => {
                         // ignore for now
                     }
@@ -153,10 +137,6 @@ impl InvokeUiSession for SciterHandler {
             let ok = v.start_streaming((w, h), COLOR_SPACE::Rgb32, None);
             log::info!("[video] reinitialized: {:?}", ok);
         });
-    }
-
-    fn update_privacy_mode(&self) {
-        self.call("updatePrivacyMode", &[]);
     }
 
     fn set_permission(&self, name: &str, value: bool) {
@@ -398,14 +378,6 @@ impl InvokeUiSession for SciterHandler {
 
     fn next_rgba(&self, _display: usize) {}
 
-    fn update_record_status(&self, start: bool) {
-        self.call("updateRecordStatus", &make_args!(start));
-    }
-
-    fn printer_request(&self, id: i32, path: String) {
-        self.call("printerRequest", &make_args!(id, path));
-    }
-
     fn handle_screenshot_resp(&self, _sid: String, msg: String) {
         self.call("screenshot", &make_args!(msg));
     }
@@ -414,6 +386,12 @@ impl InvokeUiSession for SciterHandler {
         // Terminal support is not implemented for Sciter UI
         // This is a stub implementation to satisfy the trait requirements
     }
+
+    fn update_record_status(&self, _start: bool) {}
+
+    fn update_privacy_mode(&self) {}
+
+    fn printer_request(&self, _id: i32, _path: String) {}
 }
 
 pub struct SciterSession(Session<SciterHandler>);
@@ -521,7 +499,6 @@ impl sciter::EventHandler for SciterSession {
         fn ctrl_alt_del();
         fn transfer_file();
         fn tunnel();
-        fn lock_screen();
         fn reconnect(bool);
         fn get_chatbox();
         fn get_icon();
@@ -559,14 +536,11 @@ impl sciter::EventHandler for SciterSession {
         fn save_image_quality(String);
         fn save_custom_image_quality(i32);
         fn refresh_video(i32);
-        fn record_screen(bool);
         fn is_screenshot_supported();
         fn take_screenshot(i32, String);
         fn handle_screenshot(String);
         fn get_toggle_option(String);
-        fn is_privacy_mode_supported();
         fn toggle_option(String);
-        fn toggle_privacy_mode(String, bool);
         fn get_remember();
         fn peer_platform();
         fn set_write_override(i32, i32, bool, bool, bool);
@@ -575,15 +549,11 @@ impl sciter::EventHandler for SciterSession {
         fn save_keyboard_mode(String);
         fn alternative_codecs();
         fn update_supported_decodings();
-        fn restart_remote_device();
         fn request_voice_call();
         fn close_voice_call();
         fn version_cmp(String, String);
         fn set_selected_windows_session_id(String);
-        fn is_recording();
         fn has_file_clipboard();
-        fn get_printer_names();
-        fn on_printer_selected(i32, String, String);
     }
 }
 
@@ -602,8 +572,6 @@ impl SciterSession {
 
         let conn_type = if cmd.eq("--file-transfer") {
             ConnType::FILE_TRANSFER
-        } else if cmd.eq("--view-camera") {
-            ConnType::VIEW_CAMERA
         } else if cmd.eq("--port-forward") {
             ConnType::PORT_FORWARD
         } else if cmd.eq("--rdp") {
@@ -885,22 +853,6 @@ impl SciterSession {
 
     fn version_cmp(&self, v1: String, v2: String) -> i32 {
         (hbb_common::get_version_number(&v1) - hbb_common::get_version_number(&v2)) as i32
-    }
-
-    fn get_printer_names(&self) -> Value {
-        #[cfg(target_os = "windows")]
-        let printer_names = crate::platform::windows::get_printer_names().unwrap_or_default();
-        #[cfg(not(target_os = "windows"))]
-        let printer_names: Vec<String> = vec![];
-        let mut v = Value::array(0);
-        for name in printer_names {
-            v.push(name);
-        }
-        v
-    }
-
-    fn on_printer_selected(&self, id: i32, path: String, printer_name: String) {
-        self.printer_response(id, path, printer_name);
     }
 
     fn handle_screenshot(&self, action: String) -> String {

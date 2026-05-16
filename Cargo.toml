@@ -13,10 +13,6 @@ name = "librustdesk"
 crate-type = ["cdylib", "staticlib", "rlib"]
 
 [[bin]]
-name = "naming"
-path = "src/naming.rs"
-
-[[bin]]
 name = "service"
 path = "src/service.rs"
 
@@ -83,6 +79,7 @@ totp-rs = { version = "5.4", default-features = false, features = ["gen_secret",
 stunclient = "0.4"
 kcp-sys= { git = "https://github.com/rustdesk-org/kcp-sys"}
 reqwest = { version = "0.12", features = ["blocking", "socks", "json", "native-tls", "rustls-tls", "rustls-tls-native-roots", "gzip"], default-features=false }
+async-channel = "2.3"
 
 [target.'cfg(not(target_os = "linux"))'.dependencies]
 # https://github.com/rustdesk/rustdesk/discussions/10197, not use cpal on linux
@@ -138,8 +135,6 @@ windows = { version = "0.61", features = [
 ] }
 winreg = "0.11"
 windows-service = "0.6"
-virtual_display = { path = "libs/virtual_display" }
-remote_printer = { path = "libs/remote_printer" }
 impersonate_system = { git = "https://github.com/rustdesk-org/impersonate-system" }
 shared_memory = "0.12"
 tauri-winrt-notification = "0.1"
@@ -160,7 +155,7 @@ piet-coregraphics = "0.6"
 foreign-types = "0.3"
 
 [target.'cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))'.dependencies]
-tray-icon = { git = "https://github.com/tauri-apps/tray-icon", version = "0.21.3" }
+tray-icon = { git = "https://github.com/tauri-apps/tray-icon", version = "0.24" }
 tao = { git = "https://github.com/rustdesk-org/tao", branch = "dev" }
 image = "0.24"
 
@@ -204,7 +199,7 @@ jni = "0.21"
 android-wakelock = { git = "https://github.com/rustdesk-org/android-wakelock" }
 
 [workspace]
-members = ["libs/scrap", "libs/hbb_common", "libs/enigo", "libs/clipboard", "libs/virtual_display", "libs/virtual_display/dylib", "libs/portable", "libs/remote_printer"]
+members = ["libs/scrap", "libs/hbb_common", "libs/enigo", "libs/clipboard", "libs/portable"]
 exclude = ["vdi/host", "examples/custom_plugin"]
 
 # Patch libxdo-sys to use a stub implementation that doesn't require libxdo

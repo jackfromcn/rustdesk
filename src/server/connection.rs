@@ -17,7 +17,9 @@ use crate::{
     client::{
         new_voice_call_request, new_voice_call_response, start_audio_thread, MediaData, MediaSender,
     },
-    display_service, ipc, privacy_mode, video_service, VERSION,
+    display_service, ipc,
+    keyboard::client::lock_screen,
+    privacy_mode, video_service, VERSION,
 };
 #[cfg(any(target_os = "android", target_os = "ios"))]
 use crate::{common::DEVICE_NAME, flutter::connection_manager::start_channel};
@@ -4344,7 +4346,7 @@ impl Connection {
         log::info!("#{} Connection closed: {}", self.inner.id(), reason);
         if lock && self.lock_after_session_end && self.keyboard {
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
-            lock_screen().await;
+            lock_screen();
         }
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         let data = if self.chat_unanswered || self.file_transferred && cfg!(feature = "flutter") {

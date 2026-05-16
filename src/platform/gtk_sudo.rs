@@ -43,7 +43,7 @@ pub fn run(cmds: Vec<&str>) -> ResultType<()> {
     // rustdesk service kill `rustdesk --` processes
     let second_arg = std::env::args().nth(1).unwrap_or_default();
     let cmd_mode =
-        second_arg.starts_with("--") && second_arg != "--tray" && second_arg != "--no-server";
+        second_arg.starts_with("--") && second_arg != "--no-server";
     let mod_arg = if cmd_mode { "cmd" } else { "gui" };
     let mut args = vec!["-gtk-sudo", mod_arg];
     args.append(&mut cmds.clone());

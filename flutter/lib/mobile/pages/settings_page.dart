@@ -78,11 +78,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
   var _denyLANDiscovery = false;
   var _onlyWhiteList = false;
   var _enableDirectIPAccess = false;
-  var _enableRecordSession = false;
   var _enableHardwareCodec = false;
-  var _allowWebSocket = false;
-  var _autoRecordIncomingSession = false;
-  var _autoRecordOutgoingSession = false;
   var _allowAutoDisconnect = false;
   var _localIP = "";
   var _directAccessPort = "";
@@ -110,18 +106,12 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
     _onlyWhiteList = whitelistNotEmpty();
     _enableDirectIPAccess = option2bool(
         kOptionDirectServer, bind.mainGetOptionSync(key: kOptionDirectServer));
-    _enableRecordSession = option2bool(kOptionEnableRecordSession,
-        bind.mainGetOptionSync(key: kOptionEnableRecordSession));
     _enableHardwareCodec = option2bool(kOptionEnableHwcodec,
         bind.mainGetOptionSync(key: kOptionEnableHwcodec));
     _allowWebSocket = mainGetBoolOptionSync(kOptionAllowWebSocket);
     _allowInsecureTlsFallback =
         mainGetBoolOptionSync(kOptionAllowInsecureTLSFallback);
     _disableUdp = bind.mainGetOptionSync(key: kOptionDisableUdp) == 'Y';
-    _autoRecordIncomingSession = option2bool(kOptionAllowAutoRecordIncoming,
-        bind.mainGetOptionSync(key: kOptionAllowAutoRecordIncoming));
-    _autoRecordOutgoingSession = option2bool(kOptionAllowAutoRecordOutgoing,
-        bind.mainGetLocalOption(key: kOptionAllowAutoRecordOutgoing));
     _localIP = bind.mainGetOptionSync(key: 'local-ip-addr');
     _directAccessPort = bind.mainGetOptionSync(key: kOptionDirectAccessPort);
     _allowAutoDisconnect = option2bool(kOptionAllowAutoDisconnect,
@@ -281,7 +271,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
         if (bind.isCustomClient())
           Align(
             alignment: Alignment.center,
-            child: loadPowered(context),
+            child: loadLogo(),
           ),
         Align(
           alignment: Alignment.center,
@@ -409,20 +399,6 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                 final newValue = await mainGetBoolOption(kOptionEnableAbr);
                 setState(() {
                   _enableAbr = newValue;
-                });
-              },
-      ),
-      SettingsTile.switchTile(
-        title: Text(translate('Enable recording session')),
-        initialValue: _enableRecordSession,
-        onToggle: isOptionFixed(kOptionEnableRecordSession)
-            ? null
-            : (v) async {
-                await mainSetBoolOption(kOptionEnableRecordSession, v);
-                final newValue =
-                    await mainGetBoolOption(kOptionEnableRecordSession);
-                setState(() {
-                  _enableRecordSession = newValue;
                 });
               },
       ),
@@ -681,35 +657,6 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
     final settings = SettingsList(
       sections: [
         customClientSection,
-        if (!bind.isDisableAccount())
-          SettingsSection(
-            title: Text(translate('Account')),
-            tiles: [
-              SettingsTile(
-                title: Obx(() => Text(gFFI.userModel.userName.value.isEmpty
-                    ? translate('Login')
-                    : '${translate('Logout')} (${gFFI.userModel.accountLabelWithHandle})')),
-                leading: Obx(() {
-                  final avatar = bind.mainResolveAvatarUrl(
-                      avatar: gFFI.userModel.avatar.value);
-                  return buildAvatarWidget(
-                        avatar: avatar,
-                        size: 28,
-                        borderRadius: null,
-                        fallback: Icon(Icons.person),
-                      ) ??
-                      Icon(Icons.person);
-                }),
-                onPressed: (context) {
-                  if (gFFI.userModel.userName.value.isEmpty) {
-                    loginDialog();
-                  } else {
-                    logOutConfirmDialog();
-                  }
-                },
-              ),
-            ],
-          ),
         SettingsSection(title: Text(translate("Settings")), tiles: [
           if (!disabledSettings && !_hideNetwork && !_hideServer)
             SettingsTile(
@@ -819,24 +766,6 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
               showThemeSettings(gFFI.dialogManager);
             },
           ),
-          if (!bind.isDisableAccount())
-            SettingsTile.switchTile(
-              title: Text(translate('note-at-conn-end-tip')),
-              initialValue: _allowAskForNoteAtEndOfConnection,
-              onToggle: (v) async {
-                if (v && !gFFI.userModel.isLogin) {
-                  final res = await loginDialog();
-                  if (res != true) return;
-                }
-                await mainSetLocalBoolOption(
-                    kOptionAllowAskForNoteAtEndOfConnection, v);
-                final newValue = mainGetLocalBoolOptionSync(
-                    kOptionAllowAskForNoteAtEndOfConnection);
-                setState(() {
-                  _allowAskForNoteAtEndOfConnection = newValue;
-                });
-              },
-            ),
           if (!incomingOnly)
             SettingsTile.switchTile(
               title:
@@ -868,58 +797,6 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                     },
             ),
           ]),
-        if (isAndroid)
-          SettingsSection(
-            title: Text(translate("Recording")),
-            tiles: [
-              if (!outgoingOnly)
-                SettingsTile.switchTile(
-                  title:
-                      Text(translate('Automatically record incoming sessions')),
-                  initialValue: _autoRecordIncomingSession,
-                  onToggle: isOptionFixed(kOptionAllowAutoRecordIncoming)
-                      ? null
-                      : (v) async {
-                          await bind.mainSetOption(
-                              key: kOptionAllowAutoRecordIncoming,
-                              value: bool2option(
-                                  kOptionAllowAutoRecordIncoming, v));
-                          final newValue = option2bool(
-                              kOptionAllowAutoRecordIncoming,
-                              await bind.mainGetOption(
-                                  key: kOptionAllowAutoRecordIncoming));
-                          setState(() {
-                            _autoRecordIncomingSession = newValue;
-                          });
-                        },
-                ),
-              if (!incomingOnly)
-                SettingsTile.switchTile(
-                  title:
-                      Text(translate('Automatically record outgoing sessions')),
-                  initialValue: _autoRecordOutgoingSession,
-                  onToggle: isOptionFixed(kOptionAllowAutoRecordOutgoing)
-                      ? null
-                      : (v) async {
-                          await bind.mainSetLocalOption(
-                              key: kOptionAllowAutoRecordOutgoing,
-                              value: bool2option(
-                                  kOptionAllowAutoRecordOutgoing, v));
-                          final newValue = option2bool(
-                              kOptionAllowAutoRecordOutgoing,
-                              bind.mainGetLocalOption(
-                                  key: kOptionAllowAutoRecordOutgoing));
-                          setState(() {
-                            _autoRecordOutgoingSession = newValue;
-                          });
-                        },
-                ),
-              SettingsTile(
-                title: Text(translate("Directory")),
-                description: Text(bind.mainVideoSaveDirectory(root: false)),
-              ),
-            ],
-          ),
         if (isAndroid &&
             !disabledSettings &&
             !outgoingOnly &&

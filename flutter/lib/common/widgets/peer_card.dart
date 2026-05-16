@@ -542,7 +542,6 @@ abstract class BasePeerCard extends StatelessWidget {
     BuildContext context,
     String title, {
     bool isFileTransfer = false,
-    bool isViewCamera = false,
     bool isTcpTunneling = false,
     bool isRDP = false,
     bool isTerminal = false,
@@ -562,7 +561,6 @@ abstract class BasePeerCard extends StatelessWidget {
           peer,
           tab,
           isFileTransfer: isFileTransfer,
-          isViewCamera: isViewCamera,
           isTcpTunneling: isTcpTunneling,
           isRDP: isRDP,
           isTerminal: isTerminal || isTerminalRunAsAdmin,
@@ -589,15 +587,6 @@ abstract class BasePeerCard extends StatelessWidget {
       context,
       translate('Transfer file'),
       isFileTransfer: true,
-    );
-  }
-
-  @protected
-  MenuEntryBase<String> _viewCameraAction(BuildContext context) {
-    return _connectCommonAction(
-      context,
-      translate('View camera'),
-      isViewCamera: true,
     );
   }
 
@@ -969,7 +958,6 @@ class RecentPeerCard extends BasePeerCard {
     final List<MenuEntryBase<String>> menuItems = [
       _connectAction(context),
       _transferFileAction(context),
-      _viewCameraAction(context),
       _terminalAction(context),
     ];
 
@@ -1034,7 +1022,6 @@ class FavoritePeerCard extends BasePeerCard {
     final List<MenuEntryBase<String>> menuItems = [
       _connectAction(context),
       _transferFileAction(context),
-      _viewCameraAction(context),
       _terminalAction(context),
     ];
 
@@ -1094,7 +1081,6 @@ class DiscoveredPeerCard extends BasePeerCard {
     final List<MenuEntryBase<String>> menuItems = [
       _connectAction(context),
       _transferFileAction(context),
-      _viewCameraAction(context),
       _terminalAction(context),
     ];
 
@@ -1153,7 +1139,6 @@ class AddressBookPeerCard extends BasePeerCard {
     final List<MenuEntryBase<String>> menuItems = [
       _connectAction(context),
       _transferFileAction(context),
-      _viewCameraAction(context),
       _terminalAction(context),
     ];
 
@@ -1310,7 +1295,6 @@ class MyGroupPeerCard extends BasePeerCard {
     final List<MenuEntryBase<String>> menuItems = [
       _connectAction(context),
       _transferFileAction(context),
-      _viewCameraAction(context),
       _terminalAction(context),
     ];
 
@@ -1540,7 +1524,6 @@ class TagPainter extends CustomPainter {
 
 void connectInPeerTab(BuildContext context, Peer peer, PeerTabIndex tab,
     {bool isFileTransfer = false,
-    bool isViewCamera = false,
     bool isTcpTunneling = false,
     bool isRDP = false,
     bool isTerminal = false}) async {
@@ -1575,7 +1558,6 @@ void connectInPeerTab(BuildContext context, Peer peer, PeerTabIndex tab,
       isSharedPassword: isSharedPassword,
       isFileTransfer: isFileTransfer,
       isTerminal: isTerminal,
-      isViewCamera: isViewCamera,
       isTcpTunneling: isTcpTunneling,
       isRDP: isRDP);
 }

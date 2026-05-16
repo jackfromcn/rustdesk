@@ -160,13 +160,11 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
   // Does not work for connection established by "accept".
   connectWithToken(
       {bool isFileTransfer = false,
-      bool isViewCamera = false,
       bool isTcpTunneling = false,
       bool isTerminal = false}) {
     final connToken = bind.sessionGetConnToken(sessionId: ffi.sessionId);
     connect(context, id,
         isFileTransfer: isFileTransfer,
-        isViewCamera: isViewCamera,
         isTerminal: isTerminal,
         isTcpTunneling: isTcpTunneling,
         connToken: connToken);
@@ -180,11 +178,6 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
     );
     v.add(
       TTextMenu(
-          child: Text(translate('View camera')),
-          onPressed: () => connectWithToken(isViewCamera: true)),
-    );
-    v.add(
-      TTextMenu(
           child: Text('${translate('Terminal')} (beta)'),
           onPressed: () => connectWithToken(isTerminal: true)),
     );
@@ -192,29 +185,6 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
       TTextMenu(
           child: Text(translate('TCP tunneling')),
           onPressed: () => connectWithToken(isTcpTunneling: true)),
-    );
-  }
-  // note
-  if (isDefaultConn && !bind.isDisableAccount()) {
-    v.add(
-      TTextMenu(
-          child: Text(translate('Note')),
-          onPressed: () async {
-            bool isLogin =
-                bind.mainGetLocalOption(key: 'access_token').isNotEmpty;
-            if (!isLogin) {
-              final res = await loginDialog();
-              if (res != true) return;
-              // Desktop: send message to main window to refresh login status
-              // Web: login is required before connection, so no need to refresh
-              // Mobile: same isolate, no need to send message
-              if (isDesktop) {
-                rustDeskWinManager.call(
-                    WindowType.Main, kWindowRefreshCurrentUser, "");
-              }
-            }
-            showAuditDialog(ffi);
-          }),
     );
   }
   // divider
@@ -230,27 +200,6 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
       TTextMenu(
           child: Text('${translate("Insert Ctrl + Alt + Del")}'),
           onPressed: () => bind.sessionCtrlAltDel(sessionId: sessionId)),
-    );
-  }
-  // restart
-  if (isDefaultConn &&
-      perms['restart'] != false &&
-      (pi.platform == kPeerPlatformLinux ||
-          pi.platform == kPeerPlatformWindows ||
-          pi.platform == kPeerPlatformMacOS)) {
-    v.add(
-      TTextMenu(
-          child: Text(translate('Restart remote device')),
-          onPressed: () =>
-              showRestartRemoteDevice(pi, id, sessionId, ffi.dialogManager)),
-    );
-  }
-  // insertLock
-  if (isDefaultConn && !ffiModel.viewOnly && ffi.ffiModel.keyboard) {
-    v.add(
-      TTextMenu(
-          child: Text(translate('Insert Lock')),
-          onPressed: () => bind.sessionLockScreen(sessionId: sessionId)),
     );
   }
   // blockUserInput
@@ -288,27 +237,6 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
       child: Text(translate('Refresh')),
       onPressed: () => sessionRefreshVideo(sessionId, pi),
     ));
-  }
-  // record
-  if (!(isDesktop || isWeb) &&
-      (ffi.recordingModel.start || (perms["recording"] != false))) {
-    v.add(TTextMenu(
-        child: Row(
-          children: [
-            Text(translate(ffi.recordingModel.start
-                ? 'Stop session recording'
-                : 'Start session recording')),
-            Padding(
-              padding: EdgeInsets.only(left: 12),
-              child: Icon(
-                  ffi.recordingModel.start
-                      ? Icons.pause_circle_filled
-                      : Icons.videocam_outlined,
-                  color: MyTheme.accent),
-            )
-          ],
-        ),
-        onPressed: () => ffi.recordingModel.toggle()));
   }
 
   // to-do:
@@ -685,7 +613,6 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
   }
 
   if (pi.isSupportMultiDisplay &&
-      PrivacyModeState.find(id).isEmpty &&
       pi.displaysCount.value > 1 &&
       bind.mainGetUserDefaultOption(key: kKeyShowMonitorsToolbar) == 'Y') {
     final value =
@@ -750,100 +677,6 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
         child: Text(translate('View Mode'))));
   }
   return v;
-}
-
-var togglePrivacyModeTime = DateTime.now().subtract(const Duration(hours: 1));
-
-List<TToggleMenu> toolbarPrivacyMode(
-    RxString privacyModeState, BuildContext context, String id, FFI ffi) {
-  final ffiModel = ffi.ffiModel;
-  final pi = ffiModel.pi;
-  final sessionId = ffi.sessionId;
-  final hasPrivacyModePermission = ffiModel.permissions['privacy_mode'] != false;
-
-  // Backend revocation already attempts to turn privacy mode off.
-  // Still keep this menu when privacy mode is active, so users can turn it off
-  // if there is a sync delay, version mismatch, or off attempt failure.
-  if (!hasPrivacyModePermission && privacyModeState.isEmpty) {
-    return []; // No permission and not active, hide options.
-  }
-
-  getDefaultMenu(Future<void> Function(SessionID sid, String opt) toggleFunc) {
-    final enabled =
-        !ffiModel.viewOnly && (hasPrivacyModePermission || privacyModeState.isNotEmpty);
-    return TToggleMenu(
-        value: privacyModeState.isNotEmpty,
-        onChanged: enabled
-            ? (value) {
-                if (value == null) return;
-                if (ffiModel.pi.currentDisplay != 0 &&
-                    ffiModel.pi.currentDisplay != kAllDisplayValue) {
-                  msgBox(
-                      sessionId,
-                      'custom-nook-nocancel-hasclose',
-                      'info',
-                      'Please switch to Display 1 first',
-                      '',
-                      ffi.dialogManager);
-                  return;
-                }
-                final option = 'privacy-mode';
-                toggleFunc(sessionId, option);
-              }
-            : null,
-        child: Text(translate('Privacy mode')));
-  }
-
-  final privacyModeImpls =
-      pi.platformAdditions[kPlatformAdditionsSupportedPrivacyModeImpl]
-          as List<dynamic>?;
-  if (privacyModeImpls == null) {
-    return [
-      getDefaultMenu((sid, opt) async {
-        bind.sessionToggleOption(sessionId: sid, value: opt);
-        togglePrivacyModeTime = DateTime.now();
-      })
-    ];
-  }
-  if (privacyModeImpls.isEmpty) {
-    return [];
-  }
-
-  if (privacyModeImpls.length == 1) {
-    final implKey = (privacyModeImpls[0] as List<dynamic>)[0] as String;
-    return [
-      getDefaultMenu((sid, opt) async {
-        bind.sessionTogglePrivacyMode(
-            sessionId: sid, implKey: implKey, on: privacyModeState.isEmpty);
-        togglePrivacyModeTime = DateTime.now();
-      })
-    ];
-  } else {
-    final visibleImpls = hasPrivacyModePermission
-        ? privacyModeImpls
-        : privacyModeImpls.where((e) {
-            final implKey = (e as List<dynamic>)[0] as String;
-            return privacyModeState.value == implKey;
-          }).toList();
-    return visibleImpls.map((e) {
-      final implKey = (e as List<dynamic>)[0] as String;
-      final implName = (e)[1] as String;
-      final enabled = !ffiModel.viewOnly &&
-          (hasPrivacyModePermission || privacyModeState.value == implKey);
-      return TToggleMenu(
-          child: Text(translate(implName)),
-          value: privacyModeState.value == implKey,
-          onChanged: enabled
-              ? (value) {
-                  if (value == null) return;
-                  if (value && !hasPrivacyModePermission) return;
-                  togglePrivacyModeTime = DateTime.now();
-                  bind.sessionTogglePrivacyMode(
-                      sessionId: sessionId, implKey: implKey, on: value);
-                }
-              : null);
-    }).toList();
-  }
 }
 
 List<TToggleMenu> toolbarKeyboardToggles(FFI ffi) {
@@ -937,107 +770,4 @@ List<TToggleMenu> toolbarKeyboardToggles(FFI ffi) {
         child: Text(translate('swap-left-right-mouse'))));
   }
   return v;
-}
-
-bool showVirtualDisplayMenu(FFI ffi) {
-  if (ffi.ffiModel.pi.platform != kPeerPlatformWindows) {
-    return false;
-  }
-  if (!ffi.ffiModel.pi.isInstalled) {
-    return false;
-  }
-  if (ffi.ffiModel.pi.isRustDeskIdd || ffi.ffiModel.pi.isAmyuniIdd) {
-    return true;
-  }
-  return false;
-}
-
-List<Widget> getVirtualDisplayMenuChildren(
-    FFI ffi, String id, VoidCallback? clickCallBack) {
-  if (!showVirtualDisplayMenu(ffi)) {
-    return [];
-  }
-  final pi = ffi.ffiModel.pi;
-  final privacyModeState = PrivacyModeState.find(id);
-  if (pi.isRustDeskIdd) {
-    final virtualDisplays = ffi.ffiModel.pi.RustDeskVirtualDisplays;
-    final children = <Widget>[];
-    for (var i = 0; i < kMaxVirtualDisplayCount; i++) {
-      children.add(Obx(() => CkbMenuButton(
-            value: virtualDisplays.contains(i + 1),
-            onChanged: privacyModeState.isNotEmpty
-                ? null
-                : (bool? value) async {
-                    if (value != null) {
-                      bind.sessionToggleVirtualDisplay(
-                          sessionId: ffi.sessionId, index: i + 1, on: value);
-                      clickCallBack?.call();
-                    }
-                  },
-            child: Text('${translate('Virtual display')} ${i + 1}'),
-            ffi: ffi,
-          )));
-    }
-    children.add(Divider());
-    children.add(Obx(() => MenuButton(
-          onPressed: privacyModeState.isNotEmpty
-              ? null
-              : () {
-                  bind.sessionToggleVirtualDisplay(
-                      sessionId: ffi.sessionId,
-                      index: kAllVirtualDisplay,
-                      on: false);
-                  clickCallBack?.call();
-                },
-          ffi: ffi,
-          child: Text(translate('Plug out all')),
-        )));
-    return children;
-  }
-  if (pi.isAmyuniIdd) {
-    final count = ffi.ffiModel.pi.amyuniVirtualDisplayCount;
-    final children = <Widget>[
-      Obx(() => Row(
-            children: [
-              TextButton(
-                onPressed: privacyModeState.isNotEmpty || count == 0
-                    ? null
-                    : () {
-                        bind.sessionToggleVirtualDisplay(
-                            sessionId: ffi.sessionId, index: 0, on: false);
-                        clickCallBack?.call();
-                      },
-                child: Icon(Icons.remove),
-              ),
-              Text(count.toString()),
-              TextButton(
-                onPressed: privacyModeState.isNotEmpty || count == 4
-                    ? null
-                    : () {
-                        bind.sessionToggleVirtualDisplay(
-                            sessionId: ffi.sessionId, index: 0, on: true);
-                        clickCallBack?.call();
-                      },
-                child: Icon(Icons.add),
-              ),
-            ],
-          )),
-      Divider(),
-      Obx(() => MenuButton(
-            onPressed: privacyModeState.isNotEmpty || count == 0
-                ? null
-                : () {
-                    bind.sessionToggleVirtualDisplay(
-                        sessionId: ffi.sessionId,
-                        index: kAllVirtualDisplay,
-                        on: false);
-                    clickCallBack?.call();
-                  },
-            ffi: ffi,
-            child: Text(translate('Plug out all')),
-          )),
-    ];
-    return children;
-  }
-  return [];
 }

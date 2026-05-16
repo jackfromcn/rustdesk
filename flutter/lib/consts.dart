@@ -4,9 +4,6 @@ import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:get/get.dart';
 
-const int kMaxVirtualDisplayCount = 4;
-const int kAllVirtualDisplay = -1;
-
 const double kDesktopRemoteTabBarHeight = 28.0;
 const int kInvalidWindowId = -1;
 const int kMainWindowId = 0;
@@ -21,10 +18,6 @@ const String kPlatformAdditionsIsWayland = "is_wayland";
 const String kPlatformAdditionsHeadless = "headless";
 const String kPlatformAdditionsIsInstalled = "is_installed";
 const String kPlatformAdditionsIddImpl = "idd_impl";
-const String kPlatformAdditionsRustDeskVirtualDisplays =
-    "rustdesk_virtual_displays";
-const String kPlatformAdditionsAmyuniVirtualDisplays =
-    "amyuni_virtual_displays";
 const String kPlatformAdditionsHasFileClipboard = "has_file_clipboard";
 const String kPlatformAdditionsSupportedPrivacyModeImpl =
     "supported_privacy_mode_impl";
@@ -45,7 +38,6 @@ const String kAppTypeConnectionManager = "cm";
 
 const String kAppTypeDesktopRemote = "remote";
 const String kAppTypeDesktopFileTransfer = "file transfer";
-const String kAppTypeDesktopViewCamera = "view camera";
 const String kAppTypeDesktopPortForward = "port forward";
 const String kAppTypeDesktopTerminal = "terminal";
 
@@ -63,7 +55,6 @@ const String kWindowBumpMouse = "bump_mouse";
 
 const String kWindowEventNewRemoteDesktop = "new_remote_desktop";
 const String kWindowEventNewFileTransfer = "new_file_transfer";
-const String kWindowEventNewViewCamera = "new_view_camera";
 const String kWindowEventNewPortForward = "new_port_forward";
 const String kWindowEventNewTerminal = "new_terminal";
 const String kWindowEventRestoreTerminalSessions = "restore_terminal_sessions";
@@ -92,19 +83,15 @@ const String kOptionViewOnly = "view_only";
 const String kOptionEnableLanDiscovery = "enable-lan-discovery";
 const String kOptionWhitelist = "whitelist";
 const String kOptionEnableAbr = "enable-abr";
-const String kOptionEnableRecordSession = "enable-record-session";
 const String kOptionDirectServer = "direct-server";
 const String kOptionDirectAccessPort = "direct-access-port";
 const String kOptionAllowAutoDisconnect = "allow-auto-disconnect";
 const String kOptionAutoDisconnectTimeout = "auto-disconnect-timeout";
 const String kOptionEnableHwcodec = "enable-hwcodec";
-const String kOptionAllowAutoRecordIncoming = "allow-auto-record-incoming";
-const String kOptionAllowAutoRecordOutgoing = "allow-auto-record-outgoing";
 const String kOptionVideoSaveDirectory = "video-save-directory";
 const String kOptionAccessMode = "access-mode";
 const String kOptionEnableKeyboard = "enable-keyboard";
 // "Settings -> Security -> Permissions"
-const String kOptionEnableRemotePrinter = "enable-remote-printer";
 const String kOptionEnableClipboard = "enable-clipboard";
 const String kOptionEnableFileTransfer = "enable-file-transfer";
 const String kOptionEnableAudio = "enable-audio";
@@ -179,7 +166,6 @@ const String kOptionHideServerSetting = "hide-server-settings";
 const String kOptionHideProxySetting = "hide-proxy-settings";
 const String kOptionHideWebSocketSetting = "hide-websocket-settings";
 const String kOptionHideStopService = "hide-stop-service";
-const String kOptionHideRemotePrinterSetting = "hide-remote-printer-settings";
 const String kOptionHideSecuritySetting = "hide-security-settings";
 const String kOptionHideNetworkSetting = "hide-network-settings";
 const String kOptionRemovePresetPasswordWarning =
@@ -294,15 +280,6 @@ const int kMaxRelativeMouseDelta = 10000;
 /// and Flutter keyboard handling. Value should be small enough to allow
 /// intentional quick toggles but large enough to prevent accidental double-triggers.
 const int kRelativeMouseModeToggleDebounceMs = 150;
-
-// incomming (should be incoming) is kept, because change it will break the previous setting.
-const String kKeyPrinterIncomingJobAction = 'printer-incomming-job-action';
-const String kValuePrinterIncomingJobDismiss = 'dismiss';
-const String kValuePrinterIncomingJobDefault = '';
-const String kValuePrinterIncomingJobSelected = 'selected';
-const String kKeyPrinterSelected = 'printer-selected-name';
-const String kKeyPrinterSave = 'allow-printer-dialog-save';
-const String kKeyPrinterAllowAutoPrint = 'allow-printer-auto-print';
 
 double kNewWindowOffset = isWindows
     ? 56.0

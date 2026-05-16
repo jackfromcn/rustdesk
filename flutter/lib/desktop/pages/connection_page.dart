@@ -329,12 +329,10 @@ class _ConnectionPageState extends State<ConnectionPage>
   /// Connects to the selected peer.
   void onConnect(
       {bool isFileTransfer = false,
-      bool isViewCamera = false,
       bool isTerminal = false}) {
     var id = _idController.id;
     connect(context, id,
         isFileTransfer: isFileTransfer,
-        isViewCamera: isViewCamera,
         isTerminal: isTerminal);
   }
 
@@ -558,10 +556,6 @@ class _ConnectionPageState extends State<ConnectionPage>
                                     (
                                       'Transfer file',
                                       () => onConnect(isFileTransfer: true)
-                                    ),
-                                    (
-                                      'View camera',
-                                      () => onConnect(isViewCamera: true)
                                     ),
                                     (
                                       '${translate('Terminal')} (beta)',

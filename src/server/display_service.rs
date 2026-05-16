@@ -3,8 +3,6 @@ use crate::common::SimpleCallOnReturn;
 #[cfg(target_os = "linux")]
 use crate::platform::linux::is_x11;
 #[cfg(windows)]
-use crate::virtual_display_manager;
-#[cfg(windows)]
 use hbb_common::get_version_number;
 use hbb_common::protobuf::MessageField;
 use scrap::Display;
@@ -164,13 +162,6 @@ pub fn capture_cursor_embedded() -> bool {
     scrap::is_cursor_embedded()
 }
 
-#[inline]
-#[cfg(windows)]
-pub fn is_privacy_mode_mag_supported() -> bool {
-    return *IS_CAPTURER_MAGNIFIER_SUPPORTED
-        && get_version_number(&crate::VERSION) > get_version_number("1.1.9");
-}
-
 pub fn new() -> GenericService {
     let svc = EmptyExtraFieldService::new(NAME.to_owned(), true);
     GenericService::run(&svc.clone(), run);
@@ -182,12 +173,6 @@ fn displays_to_msg(displays: Vec<DisplayInfo>) -> Message {
         ..Default::default()
     };
     pi.displays = displays.clone();
-
-    #[cfg(windows)]
-    if crate::platform::is_installed() {
-        let m = crate::virtual_display_manager::get_platform_additions();
-        pi.platform_additions = serde_json::to_string(&m).unwrap_or_default();
-    }
 
     // current_display should not be used in server.
     // It is set to 0 for compatibility with old clients.
@@ -254,41 +239,28 @@ pub(super) fn get_original_resolution(
     w: usize,
     h: usize,
 ) -> MessageField<Resolution> {
-    #[cfg(windows)]
-    let is_rustdesk_virtual_display =
-        crate::virtual_display_manager::rustdesk_idd::is_virtual_display(&display_name);
-    #[cfg(not(windows))]
-    let is_rustdesk_virtual_display = false;
-    Some(if is_rustdesk_virtual_display {
-        Resolution {
-            width: 0,
-            height: 0,
-            ..Default::default()
-        }
-    } else {
-        let changed_resolutions = CHANGED_RESOLUTIONS.write().unwrap();
-        let (width, height) = match changed_resolutions.get(display_name) {
-            Some(res) => {
+    let changed_resolutions = CHANGED_RESOLUTIONS.write().unwrap();
+    let (width, height) = match changed_resolutions.get(display_name) {
+        Some(res) => {
+            res.original
+            /*
+            The resolution change may not happen immediately, `changed` has been updated,
+            but the actual resolution is old, it will be mistaken for a third-party change.
+            if res.changed.0 != w as i32 || res.changed.1 != h as i32 {
+                // If the resolution is changed by third process, remove the record in changed_resolutions.
+                changed_resolutions.remove(display_name);
+                (w as _, h as _)
+            } else {
                 res.original
-                /*
-                The resolution change may not happen immediately, `changed` has been updated,
-                but the actual resolution is old, it will be mistaken for a third-party change.
-                if res.changed.0 != w as i32 || res.changed.1 != h as i32 {
-                    // If the resolution is changed by third process, remove the record in changed_resolutions.
-                    changed_resolutions.remove(display_name);
-                    (w as _, h as _)
-                } else {
-                    res.original
-                }
-                */
             }
-            None => (w as _, h as _),
-        };
-        Resolution {
-            width,
-            height,
-            ..Default::default()
+            */
         }
+        None => (w as _, h as _),
+    };
+    Some(Resolution {
+        width,
+        height,
+        ..Default::default()
     })
     .into()
 }
@@ -441,48 +413,7 @@ pub fn try_get_displays_add_amyuni_headless() -> ResultType<Vec<Display>> {
 
 #[inline]
 #[cfg(windows)]
-pub fn try_get_displays_(add_amyuni_headless: bool) -> ResultType<Vec<Display>> {
-    let mut displays = Display::all()?;
-
-    // Do not add virtual display if the platform is not installed or the virtual display is not supported.
-    if !crate::platform::is_installed() || !virtual_display_manager::is_virtual_display_supported()
-    {
-        return Ok(displays);
-    }
-
-    // Enable headless virtual display when
-    // 1. `amyuni` idd is not used.
-    // 2. `amyuni` idd is used and `add_amyuni_headless` is true.
-    if virtual_display_manager::is_amyuni_idd() && !add_amyuni_headless {
-        return Ok(displays);
-    }
-
-    // The following code causes a bug.
-    // The virtual display cannot be added when there's no session(eg. when exiting from RDP).
-    // Because `crate::platform::desktop_changed()` always returns true at that time.
-    //
-    // The code only solves a rare case:
-    // 1. The control side is connecting.
-    // 2. The windows session is switching, no displays are detected, but they're there.
-    // Then the controlled side plugs in a virtual display for "headless".
-    //
-    // No need to do the following check. But the code is kept here for marking the issue.
-    // If there're someones reporting the issue, we may add a better check by waiting for a while. (switching session).
-    // But I don't think it's good to add the timeout check without any issue.
-    //
-    // If is switching session, no displays may be detected.
-    // if displays.is_empty() && crate::platform::desktop_changed() {
-    //     return Ok(displays);
-    // }
-
-    let no_displays_v = no_displays(&displays);
-    if no_displays_v {
-        log::debug!("no displays, create virtual display");
-        if let Err(e) = virtual_display_manager::plug_in_headless() {
-            log::error!("plug in headless failed {}", e);
-        } else {
-            displays = Display::all()?;
-        }
-    }
+pub fn try_get_displays_(_add_amyuni_headless: bool) -> ResultType<Vec<Display>> {
+    let displays = Display::all()?;
     Ok(displays)
 }

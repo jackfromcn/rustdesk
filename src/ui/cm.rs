@@ -23,7 +23,6 @@ impl InvokeUiCM for SciterHandler {
             &make_args!(
                 client.id,
                 client.is_file_transfer,
-                client.is_view_camera,
                 client.is_terminal,
                 client.port_forward.clone(),
                 client.peer_id.clone(),
@@ -36,8 +35,7 @@ impl InvokeUiCM for SciterHandler {
                 client.file,
                 client.restart,
                 client.recording,
-                client.block_input,
-                client.privacy_mode
+                client.block_input
             ),
         );
     }
@@ -165,11 +163,6 @@ impl SciterConnectionManager {
     fn hide_cm(&self) -> bool {
         *crate::ui::cm::HIDE_CM.lock().unwrap()
     }
-
-    fn get_supported_privacy_mode_impls(&self) -> String {
-        serde_json::to_string(&crate::privacy_mode::get_supported_privacy_mode_impl())
-            .unwrap_or_default()
-    }
 }
 
 impl sciter::EventHandler for SciterConnectionManager {
@@ -193,6 +186,5 @@ impl sciter::EventHandler for SciterConnectionManager {
         fn get_option(String);
         fn get_builtin_option(String);
         fn hide_cm();
-        fn get_supported_privacy_mode_impls();
     }
 }

@@ -46,6 +46,7 @@ impl Session {
             false,
             None,
             None,
+            None,
         );
         session
     }
@@ -53,22 +54,27 @@ impl Session {
 
 #[async_trait]
 impl Interface for Session {
-    fn get_login_config_handler(&self) -> Arc<RwLock<LoginConfigHandler>> {
-        return self.lc.clone();
+    fn get_lch(&self) -> Arc<RwLock<LoginConfigHandler>> {
+        self.lc.clone()
     }
 
     fn msgbox(&self, msgtype: &str, title: &str, text: &str, link: &str) {
         match msgtype {
             "input-password" => {
                 self.sender
-                    .send(Data::Login((self.password.clone(), true)))
+                    .send(Data::Login(("".to_owned(), "".to_owned(), self.password.clone(), true)))
                     .ok();
             }
             "re-input-password" => {
                 log::error!("{}: {}", title, text);
                 match rpassword::prompt_password("Enter password: ") {
                     Ok(password) => {
-                        let login_data = Data::Login((password, true));
+                        let login_data = Data::Login((
+                            "".to_owned(),
+                            "".to_owned(),
+                            password,
+                            true,
+                        ));
                         self.sender.send(login_data).ok();
                     }
                     Err(e) => {
@@ -92,6 +98,8 @@ impl Interface for Session {
     fn handle_peer_info(&self, pi: PeerInfo) {
         self.lc.write().unwrap().handle_peer_info(&pi);
     }
+
+    fn set_multiple_windows_session(&self, _sessions: Vec<WindowsSession>) {}
 
     async fn handle_hash(&self, pass: &str, hash: Hash, peer: &mut Stream) {
         log::info!(
@@ -137,9 +145,8 @@ pub async fn connect_test(id: &str, key: String, token: String) {
         Err(err) => {
             log::error!("Failed to connect {}: {}", &id, err);
         }
-        Ok((mut stream, direct)) => {
-            log::info!("direct: {}", direct);
-            // rpassword::prompt_password("Input anything to exit").ok();
+        Ok(((mut stream, direct, _pk, _kcp, _protocol), _aux)) => {
+            log::info!("direct: {:?}", direct);
             loop {
                 tokio::select! {
                     res = hbb_common::timeout(READ_TIMEOUT, stream.next()) => match res {
@@ -150,7 +157,7 @@ pub async fn connect_test(id: &str, key: String, token: String) {
                         Ok(Some(Ok(bytes))) => {
                             if let Ok(msg_in) = Message::parse_from_bytes(&bytes) {
                                 match msg_in.union {
-                                    Some(message::Union::Hash(hash)) => {
+                                    Some(message::Union::Hash(_hash)) => {
                                         log::info!("Got hash");
                                         break;
                                     }

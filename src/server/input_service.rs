@@ -2,8 +2,6 @@
 use super::rdp_input::client::{RdpInputKeyboard, RdpInputMouse};
 use super::*;
 use crate::input::*;
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-use crate::whiteboard;
 #[cfg(target_os = "macos")]
 use dispatch::Queue;
 use enigo::{Enigo, Key, KeyboardControllable, MouseButton, MouseControllable};
@@ -453,7 +451,7 @@ lazy_static::lazy_static! {
     static ref LATEST_PEER_INPUT_CURSOR: Arc<Mutex<Input>> = Default::default();
     static ref LATEST_SYS_CURSOR_POS: Arc<Mutex<(Option<Instant>, (i32, i32))>> = Arc::new(Mutex::new((None, (INVALID_CURSOR_POS, INVALID_CURSOR_POS))));
     // Track connections that are currently using relative mouse movement.
-    // Used to disable whiteboard/cursor display for all events while in relative mode.
+    // Used to disable cursor display for all events while in relative mode.
     static ref RELATIVE_MOUSE_CONNS: Arc<Mutex<std::collections::HashSet<i32>>> = Default::default();
 }
 
@@ -747,7 +745,7 @@ pub fn handle_mouse(
 ) {
     #[cfg(target_os = "macos")]
     {
-        // having GUI (--server has tray, it is GUI too), run main GUI thread, otherwise crash
+        // having GUI (--server is GUI too), run main GUI thread, otherwise crash
         let evt = evt.clone();
         QUEUE.exec_async(move || handle_mouse_(&evt, conn, username, argb, simulate, show_cursor));
         return;
@@ -1036,18 +1034,6 @@ pub fn handle_mouse_(
     if simulate {
         handle_mouse_simulation_(evt, conn);
     }
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    {
-        let evt_type = evt.mask & MOUSE_TYPE_MASK;
-        // Relative (delta) mouse events do not include absolute coordinates, so
-        // whiteboard/cursor rendering must be disabled during relative mode to prevent
-        // incorrect cursor/whiteboard updates. We check both is_relative_mouse_active(conn)
-        // (connection already in relative mode from prior events) and evt_type (current
-        // event is relative) to guard against the first relative event before the flag is set.
-        if _show_cursor && !is_relative_mouse_active(conn) && evt_type != MOUSE_TYPE_MOVE_RELATIVE {
-            handle_mouse_show_cursor_(evt, conn, _username, _argb);
-        }
-    }
 }
 
 pub fn handle_mouse_simulation_(evt: &MouseEvent, conn: i32) {
@@ -1221,51 +1207,6 @@ pub fn handle_mouse_simulation_(evt: &MouseEvent, conn: i32) {
     }
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub fn handle_mouse_show_cursor_(evt: &MouseEvent, conn: i32, username: String, argb: u32) {
-    let buttons = evt.mask >> 3;
-    let evt_type = evt.mask & MOUSE_TYPE_MASK;
-    match evt_type {
-        MOUSE_TYPE_MOVE => {
-            whiteboard::update_whiteboard(
-                whiteboard::get_key_cursor(conn),
-                whiteboard::CustomEvent::Cursor(whiteboard::Cursor {
-                    x: evt.x as _,
-                    y: evt.y as _,
-                    argb,
-                    btns: 0,
-                    text: username,
-                }),
-            );
-        }
-        MOUSE_TYPE_UP => {
-            if buttons == MOUSE_BUTTON_LEFT {
-                // Some clients intentionally send button events without coordinates.
-                // Fall back to the last known cursor position to avoid jumping to (0, 0).
-                // TODO(protocol): (0, 0) is a valid screen coordinate. Consider using a dedicated
-                // sentinel value (e.g. INVALID_CURSOR_POS) or a protocol-level flag to distinguish
-                // "coordinates not provided" from "coordinates are (0, 0)". Impact is minor since
-                // this only affects whiteboard rendering and clicking exactly at (0, 0) is rare.
-                let (x, y) = if evt.x == 0 && evt.y == 0 {
-                    get_last_input_cursor_pos()
-                } else {
-                    (evt.x, evt.y)
-                };
-                whiteboard::update_whiteboard(
-                    whiteboard::get_key_cursor(conn),
-                    whiteboard::CustomEvent::Cursor(whiteboard::Cursor {
-                        x: x as _,
-                        y: y as _,
-                        argb,
-                        btns: buttons,
-                        text: username,
-                    }),
-                );
-            }
-        }
-        _ => {}
-    }
-}
 
 #[cfg(target_os = "windows")]
 fn handle_scale(scale: i32) {
@@ -1287,45 +1228,6 @@ pub fn is_enter(evt: &KeyEvent) -> bool {
         }
     }
     return false;
-}
-
-pub async fn lock_screen() {
-    cfg_if::cfg_if! {
-    if #[cfg(target_os = "linux")] {
-        // xdg_screensaver lock not work on Linux from our service somehow
-        // loginctl lock-session also not work, they both work run rustdesk from cmd
-        std::thread::spawn(|| {
-            let mut key_event = KeyEvent::new();
-
-            key_event.set_chr('l' as _);
-            key_event.modifiers.push(ControlKey::Meta.into());
-            key_event.mode = KeyboardMode::Legacy.into();
-
-            key_event.down = true;
-            handle_key(&key_event);
-
-            key_event.down = false;
-            handle_key(&key_event);
-        });
-    } else if #[cfg(target_os = "macos")] {
-        // CGSession -suspend not real lock screen, it is user switch
-        std::thread::spawn(|| {
-            let mut key_event = KeyEvent::new();
-
-            key_event.set_chr('q' as _);
-            key_event.modifiers.push(ControlKey::Meta.into());
-            key_event.modifiers.push(ControlKey::Control.into());
-            key_event.mode = KeyboardMode::Legacy.into();
-
-            key_event.down = true;
-            handle_key(&key_event);
-            key_event.down = false;
-            handle_key(&key_event);
-        });
-    } else {
-    crate::platform::lock_screen();
-    }
-    }
 }
 
 #[inline]
@@ -1792,11 +1694,6 @@ fn is_function_key(ck: &EnumOrUnknown<ControlKey>) -> bool {
             allow_err!(send_sas());
         });
         res = true;
-    } else if ck.value() == ControlKey::LockScreen.value() {
-        std::thread::spawn(|| {
-            lock_screen_2();
-        });
-        res = true;
     }
     return res;
 }
@@ -2192,11 +2089,6 @@ pub fn handle_key_(evt: &KeyEvent) {
             legacy_keyboard_mode(evt);
         }
     }
-}
-
-#[tokio::main(flavor = "current_thread")]
-async fn lock_screen_2() {
-    lock_screen().await;
 }
 
 #[cfg(windows)]
